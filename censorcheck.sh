@@ -16,7 +16,6 @@ USER_AGENT="Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:129.0) Gecko/20100101 F
 DOMAINS_FILE=""
 
 readonly DPI_BLOCKED_SITES=(
-  "nonexistent.domain"
   "youtube.com"
   "discord.com"
   "instagram.com"
