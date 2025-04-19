@@ -104,7 +104,7 @@ parse_arguments() {
         ;;
       -t | --timeout)
         # TODO: Remake this
-        if [[ "$2" =~ ^[1-9][0-9]*$ ]]; then
+        if [[ "$2" =~ ^[0-9]+$ ]]; then
           TIMEOUT=$2
         else
           error_exit "Invalid timeout value: $2. Timeout must be a positive integer"
