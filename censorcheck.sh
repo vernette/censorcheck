@@ -102,7 +102,6 @@ parse_arguments() {
         shift 2
         ;;
       -t | --timeout)
-        # TODO: Remake this
         if [[ "$2" =~ ^[0-9]+$ ]]; then
           TIMEOUT=$2
         else
@@ -111,7 +110,6 @@ parse_arguments() {
         shift 2
         ;;
       -r | --retries)
-        # TODO: Remake this
         if [[ "$2" =~ ^[0-9]+$ ]]; then
           RETRIES=$2
         else
