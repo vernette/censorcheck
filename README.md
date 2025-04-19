@@ -22,3 +22,9 @@ Examples:
 
 The domain file should contain one domain per line. Lines starting with # are ignored
 ```
+
+## Usage
+
+```bash
+bash <(wget -qO- https://github.com/vernette/censorcheck/raw/master/censorcheck.sh)
+```
