@@ -21,7 +21,7 @@ A bash script for checking the accessibility of websites potentially affected by
 
 ## Usage
 
-#### Run directly
+### Run directly
 
 Basic usage:
 
@@ -42,7 +42,7 @@ bash <(wget -qO- https://github.com/vernette/censorcheck/raw/master/censorcheck.
 bash <(wget -qO- https://github.com/vernette/censorcheck/raw/master/censorcheck.sh) --file ~/my-domains.txt
 ```
 
-#### Local usage
+### Local usage
 
 Download and run locally:
 
