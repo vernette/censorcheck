@@ -9,8 +9,8 @@ A bash script for checking the accessibility of websites potentially affected by
 > [!WARNING]
 > Some websites may not return expected status codes due to various security measures
 
-- Sites like **chatgpt.com**, **claude.ai** consistently return `403` status due to JavaScript verification checks, even when accessed from unrestricted locations
-- Sites like **intel.com** may return `200` status but still display blocking notifications in the actual content
+- Sites like [chatgpt.com](https://chatgpt.com), [claude.ai](https://claude.ai) consistently return `403` status due to JavaScript verification checks, even when accessed from unrestricted locations
+- Sites like [intel.com](https://intel.com) may return `200` status but still display blocking notifications in the actual content
 - Results should be verified manually when behavior seems inconsistent with your actual location
 
 ## Features
