@@ -4,6 +4,15 @@ A bash script for checking the accessibility of websites potentially affected by
 
 ![image](https://i.imgur.com/9QLDY90.png)
 
+## Important note about status codes
+
+> [!WARNING]
+> Some websites may not return expected status codes due to various security measures
+
+- Sites like **chatgpt.com**, **claude.ai** consistently return `403` status due to JavaScript verification checks, even when accessed from unrestricted locations
+- Sites like **intel.com** may return `200` status but still display blocking notifications in the actual content
+- Results should be verified manually when behavior seems inconsistent with your actual location
+
 ## Features
 
 - Tests both HTTP and HTTPS protocols for each domain
