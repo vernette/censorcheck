@@ -68,12 +68,12 @@ Usage: $SCRIPT_NAME [OPTIONS]
 Checks accessibility of websites that might be blocked by DPI or geolocation restrictions
 
 Options:
-  -h, --help             Display this help message and exit
-  -m, --mode MODE        Set checking mode: 'dpi', 'geoblock', or 'both' (default: $MODE)
-  -t, --timeout SEC      Set connection timeout in seconds (default: $TIMEOUT)
-  -r, --retries NUM      Set number of connection retries (default: $RETRIES)
-  -u, --user-agent STR   Set custom User-Agent string (default: $USER_AGENT)
-  -f, --file PATH        Read domains from specified file instead of using built-in lists
+  -h, --help         Display this help message and exit
+  -m, --mode         Set checking mode: 'dpi', 'geoblock', or 'both' (default: $MODE)
+  -t, --timeout      Set connection timeout in seconds (default: $TIMEOUT)
+  -r, --retries      Set number of connection retries (default: $RETRIES)
+  -u, --user-agent   Set custom User-Agent string (default: $USER_AGENT)
+  -f, --file         Read domains from specified file instead of using built-in lists
 
 Examples:
   $SCRIPT_NAME                              # Check all predefined domains with default settings
