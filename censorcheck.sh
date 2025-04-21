@@ -238,7 +238,10 @@ format_result() {
 
   if [ -z "$status_code" ] || [ "$status_code" = "000" ]; then
     msg="$MSG_BLOCKED"
-  elif [ "$status_code" -ge 300 ] && [ "$status_code" -lt 400 ] && [ -n "$redirect_url" ]; then
+  elif [ "$status_code" -ge 300 ] && [ "$status_code" -lt 400 ]; then
+    if [[ -z "$redirect_url" ]]; then
+      redirect_url="<empty>"
+    fi
     msg=$(printf "$MSG_REDIRECT (%s) to %b%s%b" "$status_code" "$COLOR_WHITE" "$redirect_url" "$COLOR_RESET")
   elif [ "$status_code" -eq 200 ]; then
     msg="$MSG_AVAILABLE ($status_code)"
