@@ -13,6 +13,13 @@ A bash script for checking the accessibility of websites potentially affected by
 - Configurable connection timeout and retry parameters
 - Color-coded output for easy readability
 
+## Included Domain Lists
+
+The script contains predefined lists of websites commonly affected by:
+
+- **DPI Blocking**: Includes social media, video platforms, and other commonly restricted services
+- **Geographic Restrictions**: Popular streaming services and platforms that implement geo-blocking
+
 ## Dependencies
 
 - bash
@@ -112,13 +119,6 @@ The script provides color-coded results for each domain:
 - **Red**: Site is blocked, unreachable, or access denied (HTTP 403)
 - **Blue**: Site redirects to another URL
 - **Orange**: Other HTTP status codes
-
-## Included Domain Lists
-
-The script contains predefined lists of websites commonly affected by:
-
-- **DPI Blocking**: Includes social media, video platforms, and other commonly restricted services
-- **Geographic Restrictions**: Popular streaming services and platforms that implement geo-blocking
 
 ## Contributing
 
