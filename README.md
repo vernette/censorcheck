@@ -1,4 +1,65 @@
+# censorcheck
+
+A bash script for checking the accessibility of websites potentially affected by Deep Packet Inspection (DPI) blocking or geographic restrictions.
+
 ![image](https://i.imgur.com/9QLDY90.png)
+
+## Features
+
+- Tests both HTTP and HTTPS protocols for each domain
+- Detects different access scenarios: available, blocked, redirected, or access denied
+- Includes predefined lists of commonly DPI-blocked and geo-restricted websites
+- Supports custom domain lists via file input
+- Configurable connection timeout and retry parameters
+- Color-coded output for easy readability
+
+## Dependencies
+
+- bash
+- curl
+- nslookup
+
+## Usage
+
+#### Run directly
+
+Basic usage:
+
+```bash
+bash <(wget -qO- https://github.com/vernette/censorcheck/raw/master/censorcheck.sh)
+```
+
+With parameters:
+
+```bash
+# Check only DPI-blocked sites with 10 second timeout
+bash <(wget -qO- https://github.com/vernette/censorcheck/raw/master/censorcheck.sh) --mode dpi --timeout 10
+
+# Use custom User-Agent
+bash <(wget -qO- https://github.com/vernette/censorcheck/raw/master/censorcheck.sh) --user-agent "CustomAgent/2.0"
+
+# Check domains from a local file
+bash <(wget -qO- https://github.com/vernette/censorcheck/raw/master/censorcheck.sh) --file ~/my-domains.txt
+```
+
+#### Local usage
+
+Download and run locally:
+
+```bash
+wget https://github.com/vernette/censorcheck/raw/master/censorcheck.sh
+chmod +x censorcheck.sh
+
+# Basic run
+./censorcheck.sh
+
+# Run with parameters
+./censorcheck.sh --mode geoblock
+./censorcheck.sh --timeout 10 --retries 3
+./censorcheck.sh --file custom-domains.txt
+```
+
+## Options
 
 ```
 Usage: censorcheck.sh [OPTIONS]
@@ -6,12 +67,12 @@ Usage: censorcheck.sh [OPTIONS]
 Checks accessibility of websites that might be blocked by DPI or geolocation restrictions
 
 Options:
-  -h, --help             Display this help message and exit
-  -m, --mode MODE        Set checking mode: 'dpi', 'geoblock', or 'both' (default: both)
-  -t, --timeout SEC      Set connection timeout in seconds (default: 5)
-  -r, --retries NUM      Set number of connection retries (default: 2)
-  -u, --user-agent STR   Set custom User-Agent string (default: Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:129.0) Gecko/20100101 Firefox/129.0)
-  -f, --file PATH        Read domains from specified file instead of using built-in lists
+  -h, --help         Display this help message and exit
+  -m, --mode         Set checking mode: 'dpi', 'geoblock', or 'both' (default: both)
+  -t, --timeout      Set connection timeout in seconds (default: 5)
+  -r, --retries      Set number of connection retries (default: 2)
+  -u, --user-agent   Set custom User-Agent string (default: Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:129.0) Gecko/20100101 Firefox/129.0)
+  -f, --file         Read domains from specified file instead of using built-in lists
 
 Examples:
   censorcheck.sh                              # Check all predefined domains with default settings
@@ -23,8 +84,46 @@ Examples:
 The domain file should contain one domain per line. Lines starting with # are ignored
 ```
 
-## Usage
+## Custom domain list
+
+You can check your own list of domains by creating a text file with one domain per line:
+
+```
+# My custom domains to check
+example.com
+test-site.net
+# Commented lines are ignored
+another-domain.org
+
+# Empty lines are also ignored
+```
+
+Then run the script with:
 
 ```bash
-bash <(wget -qO- https://github.com/vernette/censorcheck/raw/master/censorcheck.sh)
+./censorcheck.sh --file my-domains.txt
 ```
+
+## Test results
+
+The script provides color-coded results for each domain:
+
+- **Green**: Site is available (HTTP 200)
+- **Red**: Site is blocked, unreachable, or access denied (HTTP 403)
+- **Blue**: Site redirects to another URL
+- **Orange**: Other HTTP status codes
+
+## Included Domain Lists
+
+The script contains predefined lists of websites commonly affected by:
+
+- **DPI Blocking**: Includes social media, video platforms, and other commonly restricted services
+- **Geographic Restrictions**: Popular streaming services and platforms that implement geo-blocking
+
+## Contributing
+
+Contributions are welcome! Feel free to submit pull requests to add new domains to the predefined lists or improve the script's functionality.
+
+## TODO
+
+- [ ] Results table
