@@ -14,6 +14,7 @@ RETRIES=2
 MODE="both"
 USER_AGENT="Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:129.0) Gecko/20100101 Firefox/129.0"
 DOMAINS_FILE=""
+IP_VERSION="4"
 
 readonly DPI_BLOCKED_SITES=(
   "youtube.com"
@@ -74,13 +75,15 @@ Options:
   -r, --retries      Set number of connection retries (default: $RETRIES)
   -u, --user-agent   Set custom User-Agent string (default: $USER_AGENT)
   -f, --file         Read domains from specified file instead of using built-in lists
+  -6, --ipv6         Use IPv6 (default: IPv$IP_VERSION)
 
 Examples:
-  $SCRIPT_NAME                              # Check all predefined domains with default settings
-  $SCRIPT_NAME --mode dpi                   # Check only DPI-blocked sites
-  $SCRIPT_NAME --timeout 10 --retries 3     # Use longer timeout and more retries
-  $SCRIPT_NAME --user-agent "MyAgent/1.0"   # Use custom User-Agent
-  $SCRIPT_NAME --file my-domains.txt        # Check domains from custom file
+  $SCRIPT_NAME                               # Check all predefined domains with default settings
+  $SCRIPT_NAME --mode dpi                    # Check only DPI-blocked sites
+  $SCRIPT_NAME --timeout 10 --retries 3      # Use longer timeout and more retries
+  $SCRIPT_NAME --user-agent "MyAgent/1.0"    # Use custom User-Agent
+  $SCRIPT_NAME --file my-domains.txt         # Check domains from custom file
+  $SCRIPT_NAME --ipv6                        # Use IPv6 instead of IPv4
 
 The domain file should contain one domain per line. Lines starting with # are ignored
 EOF
@@ -137,6 +140,10 @@ parse_arguments() {
         fi
         shift 2
         ;;
+      -6 | --ipv6)
+        IP_VERSION="6"
+        shift
+        ;;
       *)
         error_exit "Unknown option: $1"
         ;;
@@ -186,6 +193,8 @@ EOF
   else
     printf "Domain mode set to: %bpredefined domains%b\n" "$COLOR_WHITE" "$COLOR_RESET"
   fi
+
+  printf "IP version set to: %bIPv%s%b\n" "$COLOR_WHITE" "$IP_VERSION" "$COLOR_RESET"
 }
 
 read_domains_from_file() {
@@ -217,6 +226,7 @@ execute_curl() {
     --retry "$RETRIES"
     --connect-timeout "$TIMEOUT"
     --max-time "$TIMEOUT"
+    -"$IP_VERSION"
     -A "$USER_AGENT"
     -H "Sec-Fetch-Site: none"
     -H "Accept-Language: en-US,en;q=0.5"
