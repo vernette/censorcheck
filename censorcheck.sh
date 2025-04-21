@@ -227,7 +227,7 @@ execute_curl() {
     curl_opts+=(-L)
   fi
 
-  curl "${curl_opts[@]}" "${protocol}://${url}"
+  curl "${curl_opts[@]}" "${protocol}://${url}" || echo "000"
 }
 
 format_result() {
