@@ -2,7 +2,7 @@
 
 A bash script for checking the accessibility of websites potentially affected by Deep Packet Inspection (DPI) blocking or geographic restrictions.
 
-![image](https://i.imgur.com/9QLDY90.png)
+![image](https://i.imgur.com/T6NsOnI.png)
 
 ## Important note about status codes
 
@@ -89,13 +89,15 @@ Options:
   -r, --retries      Set number of connection retries (default: 2)
   -u, --user-agent   Set custom User-Agent string (default: Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:129.0) Gecko/20100101 Firefox/129.0)
   -f, --file         Read domains from specified file instead of using built-in lists
+  -6, --ipv6         Use IPv6 (default: IPv4)
 
 Examples:
-  censorcheck.sh                              # Check all predefined domains with default settings
-  censorcheck.sh --mode dpi                   # Check only DPI-blocked sites
-  censorcheck.sh --timeout 10 --retries 3     # Use longer timeout and more retries
-  censorcheck.sh --user-agent "MyAgent/1.0"   # Use custom User-Agent
-  censorcheck.sh --file my-domains.txt        # Check domains from custom file
+  censorcheck.sh                               # Check all predefined domains with default settings
+  censorcheck.sh --mode dpi                    # Check only DPI-blocked sites
+  censorcheck.sh --timeout 10 --retries 3      # Use longer timeout and more retries
+  censorcheck.sh --user-agent "MyAgent/1.0"    # Use custom User-Agent
+  censorcheck.sh --file my-domains.txt         # Check domains from custom file
+  censorcheck.sh --ipv6                        # Use IPv6 instead of IPv4
 
 The domain file should contain one domain per line. Lines starting with # are ignored
 ```
