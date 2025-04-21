@@ -48,7 +48,7 @@ readonly GEO_BLOCKED_SITES=(
 )
 
 readonly MSG_AVAILABLE="Available"
-readonly MSG_BLOCKED="Blocked or site didn't respond after ${TIMEOUT}s timeout"
+readonly MSG_BLOCKED_TEMPLATE="Blocked or site didn't respond after %ss timeout"
 readonly MSG_REDIRECT="Redirected"
 readonly MSG_ACCESS_DENIED="Denied"
 readonly MSG_OTHER="Responded with status code"
@@ -247,7 +247,7 @@ format_result() {
   local msg
 
   if [ -z "$status_code" ] || [ "$status_code" = "000" ]; then
-    msg="$MSG_BLOCKED"
+    msg=$(printf "$MSG_BLOCKED_TEMPLATE" "$TIMEOUT")
   elif [ "$status_code" -ge 300 ] && [ "$status_code" -lt 400 ]; then
     if [[ -z "$redirect_url" ]]; then
       redirect_url="<empty>"
