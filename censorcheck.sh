@@ -308,22 +308,16 @@ check_url() {
 }
 
 get_domains_to_check() {
-  if [[ -n "$DOMAINS_FILE" ]]; then
+  if [[ -z "$DOMAINS_FILE" ]]; then
+    case $MODE in
+      # TODO: Replace echo with function
+      dpi) echo "${DPI_BLOCKED_SITES[@]}" ;;
+      geoblock) echo "${GEO_BLOCKED_SITES[@]}" ;;
+      both) echo "${DPI_BLOCKED_SITES[@]}" "${GEO_BLOCKED_SITES[@]}" ;;
+    esac
+  else
     read_domains_from_file "$DOMAINS_FILE"
-    return
   fi
-
-  case $MODE in
-    dpi)
-      echo "${DPI_BLOCKED_SITES[@]}"
-      ;;
-    geoblock)
-      echo "${GEO_BLOCKED_SITES[@]}"
-      ;;
-    both)
-      echo "${DPI_BLOCKED_SITES[@]}" "${GEO_BLOCKED_SITES[@]}"
-      ;;
-  esac
 }
 
 check_all_domains() {
