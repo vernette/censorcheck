@@ -138,3 +138,5 @@ Contributions are welcome! Feel free to submit pull requests to add new domains 
 ## TODO
 
 - [ ] Results table
+- [ ] JSON output
+- [ ] Debug mode
