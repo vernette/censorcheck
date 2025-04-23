@@ -89,6 +89,14 @@ The domain file should contain one domain per line. Lines starting with # are ig
 EOF
 }
 
+check_ipv6_support() {
+  if [[ -n $(ip -6 addr show scope global 2>/dev/null) ]]; then
+    return 0
+  fi
+
+  return 1
+}
+
 parse_arguments() {
   while [[ $# -gt 0 ]]; do
     case $1 in
@@ -141,6 +149,10 @@ parse_arguments() {
         shift 2
         ;;
       -6 | --ipv6)
+        if ! check_ipv6_support; then
+          error_exit "IPv6 is not supported on this system"
+        fi
+
         IP_VERSION="6"
         shift
         ;;
