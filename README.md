@@ -45,17 +45,22 @@ Basic usage:
 bash <(wget -qO- https://github.com/vernette/censorcheck/raw/master/censorcheck.sh)
 ```
 
-With parameters:
+Check only DPI-blocked sites
 
 ```bash
-# Check only DPI-blocked sites with 10 second timeout
-bash <(wget -qO- https://github.com/vernette/censorcheck/raw/master/censorcheck.sh) --mode dpi --timeout 10
+bash <(wget -qO- https://github.com/vernette/censorcheck/raw/master/censorcheck.sh) --mode dpi
+```
 
-# Use custom User-Agent
+Use custom User-Agent
+
+```bash
 bash <(wget -qO- https://github.com/vernette/censorcheck/raw/master/censorcheck.sh) --user-agent "CustomAgent/2.0"
+```
 
-# Check domains from a local file
-bash <(wget -qO- https://github.com/vernette/censorcheck/raw/master/censorcheck.sh) --file ~/my-domains.txt
+Check domains from a local file with 10 second timeout
+
+```bash
+bash <(wget -qO- https://github.com/vernette/censorcheck/raw/master/censorcheck.sh) --file ~/my-domains.txt --timeout 10
 ```
 
 ### Local usage
@@ -71,7 +76,7 @@ chmod +x censorcheck.sh
 
 # Run with parameters
 ./censorcheck.sh --mode geoblock
-./censorcheck.sh --timeout 10 --retries 3
+./censorcheck.sh --mode dpi --timeout 10 --retries 3
 ./censorcheck.sh --file custom-domains.txt
 ```
 
