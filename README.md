@@ -51,6 +51,12 @@ Check only DPI-blocked sites
 bash <(wget -qO- https://github.com/vernette/censorcheck/raw/master/censorcheck.sh) --mode dpi
 ```
 
+Use SOCKS5 proxy:
+
+```bash
+bash <(wget -qO- https://github.com/vernette/censorcheck/raw/master/censorcheck.sh) --proxy 127.0.0.1:1080
+```
+
 Use custom User-Agent
 
 ```bash
@@ -78,6 +84,7 @@ chmod +x censorcheck.sh
 ./censorcheck.sh --mode geoblock
 ./censorcheck.sh --mode dpi --timeout 10 --retries 3
 ./censorcheck.sh --file custom-domains.txt
+./censorcheck.sh --proxy 127.0.0.1:1080
 ```
 
 ## Options
@@ -95,6 +102,7 @@ Options:
   -u, --user-agent   Set custom User-Agent string (default: Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:129.0) Gecko/20100101 Firefox/129.0)
   -f, --file         Read domains from specified file instead of using built-in lists
   -6, --ipv6         Use IPv6 (default: IPv4)
+  -p, --proxy        Use SOCKS5 proxy (format: host:port)
 
 Examples:
   censorcheck.sh                               # Check all predefined domains with default settings
@@ -103,6 +111,7 @@ Examples:
   censorcheck.sh --user-agent "MyAgent/1.0"    # Use custom User-Agent
   censorcheck.sh --file my-domains.txt         # Check domains from custom file
   censorcheck.sh --ipv6                        # Use IPv6 instead of IPv4
+  censorcheck.sh --proxy 127.0.0.1:1080        # Check domains using SOCKS5 proxy
 
 The domain file should contain one domain per line. Lines starting with # are ignored
 ```

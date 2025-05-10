@@ -15,6 +15,7 @@ MODE="both"
 USER_AGENT="Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:129.0) Gecko/20100101 Firefox/129.0"
 DOMAINS_FILE=""
 IP_VERSION="4"
+PROXY=""
 
 readonly DPI_BLOCKED_SITES=(
   "youtube.com"
@@ -76,6 +77,7 @@ Options:
   -u, --user-agent   Set custom User-Agent string (default: $USER_AGENT)
   -f, --file         Read domains from specified file instead of using built-in lists
   -6, --ipv6         Use IPv6 (default: IPv$IP_VERSION)
+  -p, --proxy        Use SOCKS5 proxy (format: host:port)
 
 Examples:
   $SCRIPT_NAME                               # Check all predefined domains with default settings
@@ -84,6 +86,7 @@ Examples:
   $SCRIPT_NAME --user-agent "MyAgent/1.0"    # Use custom User-Agent
   $SCRIPT_NAME --file my-domains.txt         # Check domains from custom file
   $SCRIPT_NAME --ipv6                        # Use IPv6 instead of IPv4
+  $SCRIPT_NAME --proxy 127.0.0.1:1080        # Use SOCKS5 proxy
 
 The domain file should contain one domain per line. Lines starting with # are ignored
 EOF
@@ -156,6 +159,14 @@ parse_arguments() {
         IP_VERSION="6"
         shift
         ;;
+      -p | --proxy)
+        if [[ -n "${2:-}" ]]; then
+          PROXY="$2"
+        else
+          error_exit "Proxy address cannot be empty"
+        fi
+        shift 2
+        ;;
       *)
         error_exit "Unknown option: $1"
         ;;
@@ -207,6 +218,10 @@ EOF
   fi
 
   printf "IP version set to: %bIPv%s%b\n" "$COLOR_WHITE" "$IP_VERSION" "$COLOR_RESET"
+
+  if [ -n "$PROXY" ]; then
+    printf "SOCKS5 proxy set to: %b%s%b\n" "$COLOR_WHITE" "$PROXY" "$COLOR_RESET"
+  fi
 }
 
 read_domains_from_file() {
@@ -244,6 +259,10 @@ execute_curl() {
     -H "Accept-Language: en-US,en;q=0.5"
     -H "Accept-Encoding: gzip, deflate, br, zstd"
   )
+
+  if [ -n "$PROXY" ]; then
+    curl_opts+=(--proxy "socks5://$PROXY")
+  fi
 
   if [ "$follow_redirects" = true ]; then
     curl_opts+=(-L)
