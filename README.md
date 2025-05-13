@@ -57,6 +57,12 @@ Use SOCKS5 proxy:
 bash <(wget -qO- https://github.com/vernette/censorcheck/raw/master/censorcheck.sh) --proxy 127.0.0.1:1080
 ```
 
+Check a single domain:
+
+```bash
+bash <(wget -qO- https://github.com/vernette/censorcheck/raw/master/censorcheck.sh) --domain example.com
+```
+
 Use custom User-Agent
 
 ```bash
@@ -85,6 +91,7 @@ chmod +x censorcheck.sh
 ./censorcheck.sh --mode dpi --timeout 10 --retries 3
 ./censorcheck.sh --file custom-domains.txt
 ./censorcheck.sh --proxy 127.0.0.1:1080
+./censorcheck.sh --domain example.com
 ```
 
 ## Options
@@ -103,6 +110,7 @@ Options:
   -f, --file         Read domains from specified file instead of using built-in lists
   -6, --ipv6         Use IPv6 (default: IPv4)
   -p, --proxy        Use SOCKS5 proxy (format: host:port)
+  -d, --domain       Specify a single domain to check
 
 Examples:
   censorcheck.sh                               # Check all predefined domains with default settings
@@ -112,6 +120,7 @@ Examples:
   censorcheck.sh --file my-domains.txt         # Check domains from custom file
   censorcheck.sh --ipv6                        # Use IPv6 instead of IPv4
   censorcheck.sh --proxy 127.0.0.1:1080        # Check domains using SOCKS5 proxy
+  censorcheck.sh --domain example.com          # Check a single domain
 
 The domain file should contain one domain per line. Lines starting with # are ignored
 ```

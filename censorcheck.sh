@@ -16,6 +16,7 @@ USER_AGENT="Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:129.0) Gecko/20100101 F
 DOMAINS_FILE=""
 IP_VERSION="4"
 PROXY=""
+SINGLE_DOMAIN=""
 
 readonly DPI_BLOCKED_SITES=(
   "youtube.com"
@@ -78,6 +79,7 @@ Options:
   -f, --file         Read domains from specified file instead of using built-in lists
   -6, --ipv6         Use IPv6 (default: IPv$IP_VERSION)
   -p, --proxy        Use SOCKS5 proxy (format: host:port)
+  -d, --domain       Specify a single domain to check
 
 Examples:
   $SCRIPT_NAME                               # Check all predefined domains with default settings
@@ -87,6 +89,7 @@ Examples:
   $SCRIPT_NAME --file my-domains.txt         # Check domains from custom file
   $SCRIPT_NAME --ipv6                        # Use IPv6 instead of IPv4
   $SCRIPT_NAME --proxy 127.0.0.1:1080        # Use SOCKS5 proxy
+  $SCRIPT_NAME --domain example.com          # Check a single domain
 
 The domain file should contain one domain per line. Lines starting with # are ignored
 EOF
@@ -167,6 +170,14 @@ parse_arguments() {
         fi
         shift 2
         ;;
+      -d | --domain)
+        if [[ -n "$2" ]]; then
+          SINGLE_DOMAIN="$2"
+        else
+          error_exit "Domain cannot be empty"
+        fi
+        shift 2
+        ;;
       *)
         error_exit "Unknown option: $1"
         ;;
@@ -205,7 +216,7 @@ EOF
       ;;
   esac
 
-  if [[ -z "$DOMAINS_FILE" ]]; then
+  if [[ -z "$DOMAINS_FILE" ]] && [[ -z "$SINGLE_DOMAIN" ]]; then
     printf "Mode set to: %b%s%b\n" "$COLOR_WHITE" "$mode" "$COLOR_RESET"
   fi
 
@@ -213,6 +224,8 @@ EOF
 
   if [[ -n "$DOMAINS_FILE" ]]; then
     printf "Domain mode set to: %buser domains from %s%b\n" "$COLOR_WHITE" "$DOMAINS_FILE" "$COLOR_RESET"
+  elif [[ -n "$SINGLE_DOMAIN" ]]; then
+    printf "Checking single domain: %b%s%b\n" "$COLOR_WHITE" "$SINGLE_DOMAIN" "$COLOR_RESET"
   else
     printf "Domain mode set to: %bpredefined domains%b\n" "$COLOR_WHITE" "$COLOR_RESET"
   fi
@@ -339,7 +352,9 @@ check_url() {
 }
 
 get_domains_to_check() {
-  if [[ -z "$DOMAINS_FILE" ]]; then
+  if [[ -n "$SINGLE_DOMAIN" ]]; then
+    echo "$SINGLE_DOMAIN"
+  elif [[ -z "$DOMAINS_FILE" ]]; then
     case $MODE in
       # TODO: Replace echo with function
       dpi) echo "${DPI_BLOCKED_SITES[@]}" ;;
