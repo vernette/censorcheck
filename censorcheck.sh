@@ -17,6 +17,7 @@ DOMAINS_FILE=""
 IP_VERSION="4"
 PROXY=""
 SINGLE_DOMAIN=""
+PROTOCOL="both"
 
 readonly DPI_BLOCKED_SITES=(
   "youtube.com"
@@ -80,6 +81,8 @@ Options:
   -6, --ipv6         Use IPv6 (default: IPv$IP_VERSION)
   -p, --proxy        Use SOCKS5 proxy (format: host:port)
   -d, --domain       Specify a single domain to check
+  --http-only        Test only HTTP
+  --https-only       Test only HTTPS
 
 Examples:
   $SCRIPT_NAME                               # Check all predefined domains with default settings
@@ -90,6 +93,8 @@ Examples:
   $SCRIPT_NAME --ipv6                        # Use IPv6 instead of IPv4
   $SCRIPT_NAME --proxy 127.0.0.1:1080        # Use SOCKS5 proxy
   $SCRIPT_NAME --domain example.com          # Check a single domain
+  $SCRIPT_NAME --http-only                   # Test only HTTP
+  $SCRIPT_NAME --https-only                  # Test only HTTPS
 
 The domain file should contain one domain per line. Lines starting with # are ignored
 EOF
@@ -178,6 +183,14 @@ parse_arguments() {
         fi
         shift 2
         ;;
+      --http-only)
+        PROTOCOL="http"
+        shift
+        ;;
+      --https-only)
+        PROTOCOL="https"
+        shift
+        ;;
       *)
         error_exit "Unknown option: $1"
         ;;
@@ -235,6 +248,18 @@ EOF
   if [ -n "$PROXY" ]; then
     printf "SOCKS5 proxy set to: %b%s%b\n" "$COLOR_WHITE" "$PROXY" "$COLOR_RESET"
   fi
+
+  case $PROTOCOL in
+    http)
+      printf "Protocol set to: %bHTTP only%b\n" "$COLOR_WHITE" "$COLOR_RESET"
+      ;;
+    https)
+      printf "Protocol set to: %bHTTPS only%b\n" "$COLOR_WHITE" "$COLOR_RESET"
+      ;;
+    both)
+      printf "Protocol set to: %bHTTP and HTTPS%b\n" "$COLOR_WHITE" "$COLOR_RESET"
+      ;;
+  esac
 }
 
 read_domains_from_file() {
@@ -339,6 +364,10 @@ check_url() {
   local url=$1
   local protocol=$2
   local follow_redirects=false
+
+  if [[ "$PROTOCOL" != "both" && "$PROTOCOL" != "${protocol,,}" ]]; then
+    return
+  fi
 
   if [ "$protocol" = "HTTPS" ]; then
     follow_redirects=true

@@ -37,62 +37,45 @@ The script contains predefined lists of websites commonly affected by:
 
 ## Usage
 
-### Run directly
-
-Basic usage:
+For local usage, download the script:
 
 ```bash
-bash <(wget -qO- https://github.com/vernette/censorcheck/raw/master/censorcheck.sh)
+wget https://github.com/vernette/censorcheck/raw/master/censorcheck.sh
+chmod +x censorcheck.sh
 ```
 
-Check only DPI-blocked sites
+### Common Use Cases
+
+```bash
+# Show help message
+./censorcheck.sh --help
+
+# Check DPI-blocked sites
+./censorcheck.sh --mode dpi
+
+# Check DPI-blocked sites using IPv6
+./censorcheck.sh --mode dpi --ipv6
+
+# Check custom domain list with increased timeout and retries
+./censorcheck.sh --file sites.txt --timeout 10 --retries 3
+
+# Check if a specific site is accessible through a proxy
+./censorcheck.sh --domain example.com --proxy 127.0.0.1:1080
+
+# Check only HTTP protocol for a specific domain
+./censorcheck.sh --domain example.com --http-only
+
+# Check only HTTPS protocol for all DPI-blocked sites
+./censorcheck.sh --mode dpi --https-only
+```
+
+You could run the script directly from GitHub:
 
 ```bash
 bash <(wget -qO- https://github.com/vernette/censorcheck/raw/master/censorcheck.sh) --mode dpi
 ```
 
-Use SOCKS5 proxy:
-
-```bash
-bash <(wget -qO- https://github.com/vernette/censorcheck/raw/master/censorcheck.sh) --proxy 127.0.0.1:1080
-```
-
-Check a single domain:
-
-```bash
-bash <(wget -qO- https://github.com/vernette/censorcheck/raw/master/censorcheck.sh) --domain example.com
-```
-
-Use custom User-Agent
-
-```bash
-bash <(wget -qO- https://github.com/vernette/censorcheck/raw/master/censorcheck.sh) --user-agent "CustomAgent/2.0"
-```
-
-Check domains from a local file with 10 second timeout
-
-```bash
-bash <(wget -qO- https://github.com/vernette/censorcheck/raw/master/censorcheck.sh) --file ~/my-domains.txt --timeout 10
-```
-
-### Local usage
-
-Download and run locally:
-
-```bash
-wget https://github.com/vernette/censorcheck/raw/master/censorcheck.sh
-chmod +x censorcheck.sh
-
-# Basic run
-./censorcheck.sh
-
-# Run with parameters
-./censorcheck.sh --mode geoblock
-./censorcheck.sh --mode dpi --timeout 10 --retries 3
-./censorcheck.sh --file custom-domains.txt
-./censorcheck.sh --proxy 127.0.0.1:1080
-./censorcheck.sh --domain example.com
-```
+All options available in the help message (`-h, --help`) can be used and combined.
 
 ## Options
 
@@ -111,6 +94,8 @@ Options:
   -6, --ipv6         Use IPv6 (default: IPv4)
   -p, --proxy        Use SOCKS5 proxy (format: host:port)
   -d, --domain       Specify a single domain to check
+  --http-only        Check only HTTP protocol
+  --https-only       Check only HTTPS protocol
 
 Examples:
   censorcheck.sh                               # Check all predefined domains with default settings
