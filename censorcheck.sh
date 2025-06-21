@@ -293,7 +293,6 @@ execute_curl() {
   local curl_output
   local curl_opts=(
     -s
-    # TODO: Make HEAD request instead of GET for faster response
     -o /dev/null
     -w "%{http_code}${CURL_SEPARATOR}%{redirect_url}"
     --retry-connrefused
