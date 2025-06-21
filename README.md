@@ -96,6 +96,7 @@ Options:
   -d, --domain       Specify a single domain to check
   --http-only        Check only HTTP protocol
   --https-only       Check only HTTPS protocol
+  -j, --json         Output results in JSON format
 
 Examples:
   censorcheck.sh                               # Check all predefined domains with default settings
@@ -106,6 +107,7 @@ Examples:
   censorcheck.sh --ipv6                        # Use IPv6 instead of IPv4
   censorcheck.sh --proxy 127.0.0.1:1080        # Check domains using SOCKS5 proxy
   censorcheck.sh --domain example.com          # Check a single domain
+  censorcheck.sh --file my-domains.txt --json # Check custom domains and output JSON
 
 The domain file should contain one domain per line. Lines starting with # are ignored
 ```
