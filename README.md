@@ -107,7 +107,7 @@ Examples:
   censorcheck.sh --ipv6                        # Use IPv6 instead of IPv4
   censorcheck.sh --proxy 127.0.0.1:1080        # Check domains using SOCKS5 proxy
   censorcheck.sh --domain example.com          # Check a single domain
-  censorcheck.sh --file my-domains.txt --json # Check custom domains and output JSON
+  censorcheck.sh --file my-domains.txt --json  # Check custom domains and output JSON
 
 The domain file should contain one domain per line. Lines starting with # are ignored
 ```
@@ -149,5 +149,5 @@ Contributions are welcome! Feel free to submit pull requests to add new domains 
 
 - [ ] DNS spoofing detection by ISP or hosting provider
 - [ ] Results table
-- [ ] JSON output
+- [x] JSON output
 - [ ] Debug mode
