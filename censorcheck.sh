@@ -421,7 +421,7 @@ gather_single_domain_result() {
 
   if ! check_domain_exists "$domain"; then
     domain_json=$(jq -n --arg service "$domain" \
-    '
+      '
     {
       "service": $service,
       "error": "Domain does not exist",
@@ -442,12 +442,12 @@ gather_single_domain_result() {
       fi
     fi
     domain_json=$(jq -n \
-        --arg service "$domain" \
-        --argjson http_ipv4 "$http_ipv4" \
-        --argjson http_ipv6 "$http_ipv6" \
-        --argjson https_ipv4 "$https_ipv4" \
-        --argjson https_ipv6 "$https_ipv6" \
-        '
+      --arg service "$domain" \
+      --argjson http_ipv4 "$http_ipv4" \
+      --argjson http_ipv6 "$http_ipv6" \
+      --argjson https_ipv4 "$https_ipv4" \
+      --argjson https_ipv6 "$https_ipv6" \
+      '
         {
           "service": $service,
           "http": {
@@ -469,6 +469,7 @@ print_single_domain_text_result() {
   local result_item=$1
   local domain
   local error
+  local http_result https_result
 
   domain=$(echo "$result_item" | jq -r '.service')
 
@@ -481,15 +482,15 @@ print_single_domain_text_result() {
     printf "  %b%s%b\n" "$COLOR_ORANGE" "$error" "$COLOR_RESET"
   else
     if [[ "$PROTOCOL" == "both" || "$PROTOCOL" == "http" ]]; then
-      local http_result=$(echo "$result_item" | jq -r '.http.ipv4 // .http.ipv6 // {}')
-      local http_status=$(echo "$http_result" | jq -r '.status // "000"')
-      local http_redirect=$(echo "$http_result" | jq -r '.redirect_url // ""')
+      http_result=$(echo "$result_item" | jq -r '.http.ipv4 // .http.ipv6 // {}')
+      http_status=$(echo "$http_result" | jq -r '.status // "000"')
+      http_redirect=$(echo "$http_result" | jq -r '.redirect_url // ""')
       format_result "HTTP" "$http_status" "$http_redirect"
     fi
     if [[ "$PROTOCOL" == "both" || "$PROTOCOL" == "https" ]]; then
-      local https_result=$(echo "$result_item" | jq -r '.https.ipv4 // .https.ipv6 // {}')
-      local https_status=$(echo "$https_result" | jq -r '.status // "000"')
-      local https_redirect=$(echo "$https_result" | jq -r '.redirect_url // ""')
+      https_result=$(echo "$result_item" | jq -r '.https.ipv4 // .https.ipv6 // {}')
+      https_status=$(echo "$https_result" | jq -r '.status // "000"')
+      https_redirect=$(echo "$https_result" | jq -r '.redirect_url // ""')
       format_result "HTTPS" "$https_status" "$https_redirect"
     fi
   fi
@@ -534,7 +535,7 @@ run_checks_and_print() {
       --arg user_agent "$USER_AGENT" \
       --arg domain_mode "$(if [[ -n "$DOMAINS_FILE" ]]; then echo "user domains from $DOMAINS_FILE"; elif [[ -n "$SINGLE_DOMAIN" ]]; then echo "single domain"; else echo "predefined domains"; fi)" \
       --arg ip_version "$ip_version_param_val" \
-      --arg protocol "$( if [[ "$PROTOCOL" == "both" ]]; then echo "HTTP and HTTPS"; elif [[ "$PROTOCOL" == "http" ]]; then echo "HTTP only"; else echo "HTTPS only"; fi )" \
+      --arg protocol "$(if [[ "$PROTOCOL" == "both" ]]; then echo "HTTP and HTTPS"; elif [[ "$PROTOCOL" == "http" ]]; then echo "HTTP only"; else echo "HTTPS only"; fi)" \
       '
       [
         {"key":"timeout", "value":$timeout},
@@ -548,9 +549,9 @@ run_checks_and_print() {
       ')
 
     jq -n \
-        --argjson params "$params_json" \
-        --argjson results "$all_results_json" \
-        '
+      --argjson params "$params_json" \
+      --argjson results "$all_results_json" \
+      '
         {
           "version": 1,
           "params": $params,
