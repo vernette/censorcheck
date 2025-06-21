@@ -7,6 +7,7 @@ readonly COLOR_GREEN="\033[32m"
 readonly COLOR_BLUE="\033[36m"
 readonly COLOR_ORANGE="\033[33m"
 readonly COLOR_RESET="\033[0m"
+readonly CURL_SEPARATOR="--UNIQUE-SEPARATOR--"
 
 # Default values
 TIMEOUT=5
@@ -18,6 +19,7 @@ IP_VERSION="4"
 PROXY=""
 SINGLE_DOMAIN=""
 PROTOCOL="both"
+JSON_OUTPUT=false
 
 readonly DPI_BLOCKED_SITES=(
   "youtube.com"
@@ -83,6 +85,7 @@ Options:
   -d, --domain       Specify a single domain to check
   --http-only        Test only HTTP
   --https-only       Test only HTTPS
+  -j, --json         Output results in JSON format
 
 Examples:
   $SCRIPT_NAME                               # Check all predefined domains with default settings
@@ -191,6 +194,10 @@ parse_arguments() {
         PROTOCOL="https"
         shift
         ;;
+      -j | --json)
+        JSON_OUTPUT=true
+        shift
+        ;;
       *)
         error_exit "Unknown option: $1"
         ;;
@@ -282,16 +289,19 @@ execute_curl() {
   local url=$1
   local protocol=$2
   local follow_redirects=$3
+  local ip_version_to_use=${4:-$IP_VERSION}
+  local curl_output
   local curl_opts=(
     -s
+    # TODO: Make HEAD request instead of GET for faster response
     -o /dev/null
-    -w '%{http_code}\n%{redirect_url}'
+    -w "%{http_code}${CURL_SEPARATOR}%{redirect_url}"
     --retry-connrefused
     --retry-all-errors
     --retry "$RETRIES"
     --connect-timeout "$TIMEOUT"
     --max-time "$TIMEOUT"
-    -"$IP_VERSION"
+    -"$ip_version_to_use"
     -A "$USER_AGENT"
     -H "Sec-Fetch-Site: none"
     -H "Accept-Language: en-US,en;q=0.5"
@@ -306,7 +316,11 @@ execute_curl() {
     curl_opts+=(-L)
   fi
 
-  curl "${curl_opts[@]}" "${protocol}://${url}" || echo "000"
+  if curl_output=$(curl "${curl_opts[@]}" "${protocol}://${url}"); then
+    echo "$curl_output"
+  else
+    echo "000${CURL_SEPARATOR}"
+  fi
 }
 
 format_result() {
@@ -315,7 +329,7 @@ format_result() {
   local redirect_url=$3
   local msg
 
-  if [ -z "$status_code" ] || [ "$status_code" = "000" ]; then
+  if [ -z "$status_code" ] || [ "$status_code" = "000" ] || [ "$status_code" -eq 0 ]; then
     msg=$(printf "$MSG_BLOCKED_TEMPLATE" "$TIMEOUT")
   elif [ "$status_code" -ge 300 ] && [ "$status_code" -lt 400 ]; then
     if [[ -z "$redirect_url" ]]; then
@@ -360,26 +374,6 @@ check_domain_exists() {
   return $?
 }
 
-check_url() {
-  local url=$1
-  local protocol=$2
-  local follow_redirects=false
-
-  if [[ "$PROTOCOL" != "both" && "$PROTOCOL" != "${protocol,,}" ]]; then
-    return
-  fi
-
-  if [ "$protocol" = "HTTPS" ]; then
-    follow_redirects=true
-  fi
-
-  response=$(execute_curl "$url" "$protocol" "$follow_redirects")
-  status_code=$(echo "$response" | head -1)
-  redirect_url=$(echo "$response" | tail -1)
-
-  format_result "$protocol" "$status_code" "$redirect_url"
-}
-
 get_domains_to_check() {
   if [[ -n "$SINGLE_DOMAIN" ]]; then
     echo "$SINGLE_DOMAIN"
@@ -395,30 +389,182 @@ get_domains_to_check() {
   fi
 }
 
-check_all_domains() {
+get_single_check_result() {
+  local domain=$1
+  local protocol=$2
+  local follow_redirects=$3
+  local ip_version=$4
+  local response status_code redirect_url
+
+  response=$(execute_curl "$domain" "$protocol" "$follow_redirects" "$ip_version")
+  status_code="${response%%$CURL_SEPARATOR*}"
+  redirect_url="${response#*$CURL_SEPARATOR}"
+
+  jq -n \
+    --argjson status "${status_code:-0}" \
+    --arg redirect_url "${redirect_url:-}" \
+    '
+    {
+      "status": ($status|tonumber),
+      "redirect_url": (if $redirect_url == "" then null else $redirect_url end)
+    }
+    '
+}
+
+gather_single_domain_result() {
+  local domain=$1
+  local ipv6_supported
+  local http_ipv4=null http_ipv6=null https_ipv4=null https_ipv6=null
+  local domain_json
+
+  check_ipv6_support && ipv6_supported=true || ipv6_supported=false
+
+  if ! check_domain_exists "$domain"; then
+    domain_json=$(jq -n --arg service "$domain" \
+    '
+    {
+      "service": $service,
+      "error": "Domain does not exist",
+      "error_code": "nxdomain"
+    }
+    ')
+  else
+    if [[ "$PROTOCOL" == "both" || "$PROTOCOL" == "http" ]]; then
+      http_ipv4=$(get_single_check_result "$domain" "HTTP" false 4)
+      if $ipv6_supported; then
+        http_ipv6=$(get_single_check_result "$domain" "HTTP" false 6)
+      fi
+    fi
+    if [[ "$PROTOCOL" == "both" || "$PROTOCOL" == "https" ]]; then
+      https_ipv4=$(get_single_check_result "$domain" "HTTPS" true 4)
+      if $ipv6_supported; then
+        https_ipv6=$(get_single_check_result "$domain" "HTTPS" true 6)
+      fi
+    fi
+    domain_json=$(jq -n \
+        --arg service "$domain" \
+        --argjson http_ipv4 "$http_ipv4" \
+        --argjson http_ipv6 "$http_ipv6" \
+        --argjson https_ipv4 "$https_ipv4" \
+        --argjson https_ipv6 "$https_ipv6" \
+        '
+        {
+          "service": $service,
+          "http": {
+            "ipv4": $http_ipv4,
+            "ipv6": $http_ipv6
+          },
+          "https": {
+            "ipv4": $https_ipv4,
+            "ipv6": $https_ipv6
+          }
+        }
+        ')
+  fi
+
+  echo "$domain_json"
+}
+
+print_single_domain_text_result() {
+  local result_item=$1
+  local domain
+  local error
+
+  domain=$(echo "$result_item" | jq -r '.service')
+
+  printf "\n--------------------------------\n\n"
+  printf "Testing %b%s%b:\n" "$COLOR_WHITE" "$domain" "$COLOR_RESET"
+
+  error=$(echo "$result_item" | jq -r '.error // ""')
+
+  if [[ -n "$error" ]]; then
+    printf "  %b%s%b\n" "$COLOR_ORANGE" "$error" "$COLOR_RESET"
+  else
+    if [[ "$PROTOCOL" == "both" || "$PROTOCOL" == "http" ]]; then
+      local http_result=$(echo "$result_item" | jq -r '.http.ipv4 // .http.ipv6 // {}')
+      local http_status=$(echo "$http_result" | jq -r '.status // "000"')
+      local http_redirect=$(echo "$http_result" | jq -r '.redirect_url // ""')
+      format_result "HTTP" "$http_status" "$http_redirect"
+    fi
+    if [[ "$PROTOCOL" == "both" || "$PROTOCOL" == "https" ]]; then
+      local https_result=$(echo "$result_item" | jq -r '.https.ipv4 // .https.ipv6 // {}')
+      local https_status=$(echo "$https_result" | jq -r '.status // "000"')
+      local https_redirect=$(echo "$https_result" | jq -r '.redirect_url // ""')
+      format_result "HTTPS" "$https_status" "$https_redirect"
+    fi
+  fi
+}
+
+run_checks_and_print() {
   local domains
+  local all_results_json="[]"
+
   read -r -a domains <<<"$(get_domains_to_check)"
 
-  for domain in "${domains[@]}"; do
-    # TODO: Remove newline character from the beginning
-    printf "\n--------------------------------\n\n"
-    printf "Testing %b%s%b:\n" "$COLOR_WHITE" "$domain" "$COLOR_RESET"
+  if ! $JSON_OUTPUT; then
+    print_header
+  fi
 
-    if check_domain_exists "$domain"; then
-      check_url "$domain" "HTTP"
-      check_url "$domain" "HTTPS"
+  for domain in "${domains[@]}"; do
+    local domain_result_json
+    domain_result_json=$(gather_single_domain_result "$domain")
+
+    if $JSON_OUTPUT; then
+      all_results_json=$(echo "$all_results_json" | jq --argjson item "$domain_result_json" '. + [$item]')
     else
-      printf "  %bDomain doesn't exist%b\n" "$COLOR_ORANGE" "$COLOR_RESET"
+      print_single_domain_text_result "$domain_result_json"
     fi
   done
+
+  if $JSON_OUTPUT; then
+    local ipv6_supported
+    check_ipv6_support && ipv6_supported=true || ipv6_supported=false
+    local ip_version_param_val
+    if $ipv6_supported; then
+      ip_version_param_val="IPv4 & IPv6"
+    else
+      ip_version_param_val="IPv4"
+    fi
+
+    local params_json
+    params_json=$(jq -n \
+      --arg timeout "${TIMEOUT}s" \
+      --arg retries "$RETRIES" \
+      --arg mode "${MODE^^}" \
+      --arg user_agent "$USER_AGENT" \
+      --arg domain_mode "$(if [[ -n "$DOMAINS_FILE" ]]; then echo "user domains from $DOMAINS_FILE"; elif [[ -n "$SINGLE_DOMAIN" ]]; then echo "single domain"; else echo "predefined domains"; fi)" \
+      --arg ip_version "$ip_version_param_val" \
+      --arg protocol "$( if [[ "$PROTOCOL" == "both" ]]; then echo "HTTP and HTTPS"; elif [[ "$PROTOCOL" == "http" ]]; then echo "HTTP only"; else echo "HTTPS only"; fi )" \
+      '
+      [
+        {"key":"timeout", "value":$timeout},
+        {"key":"retries", "value":$retries},
+        {"key":"mode", "value":$mode},
+        {"key":"user_agent", "value":$user_agent},
+        {"key":"domain_mode", "value":$domain_mode},
+        {"key":"ip_version", "value":$ip_version},
+        {"key":"protocol", "value":$protocol}
+      ]
+      ')
+
+    jq -n \
+        --argjson params "$params_json" \
+        --argjson results "$all_results_json" \
+        '
+        {
+          "version": 1,
+          "params": $params,
+          "results": $results
+        }
+        '
+  fi
 }
 
 main() {
   set -euo pipefail
 
   parse_arguments "$@"
-  print_header
-  check_all_domains
+  run_checks_and_print
 }
 
 main "$@"
