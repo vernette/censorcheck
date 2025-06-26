@@ -367,12 +367,6 @@ format_result() {
   printf "  %b%s%b: %b%s%b %s\n" "$COLOR_WHITE" "$protocol" "$COLOR_RESET" "$first_word_color" "$first_word" "$COLOR_RESET" "$rest"
 }
 
-check_domain_exists() {
-  local domain=$1
-  nslookup "$domain" >/dev/null 2>&1
-  return $?
-}
-
 get_domains_to_check() {
   if [[ -n "$SINGLE_DOMAIN" ]]; then
     echo "$SINGLE_DOMAIN"
@@ -414,39 +408,29 @@ gather_single_domain_result() {
   local domain=$1
   local ipv6_supported
   local http_ipv4=null http_ipv6=null https_ipv4=null https_ipv6=null
-  local domain_json
 
   check_ipv6_support && ipv6_supported=true || ipv6_supported=false
 
-  if ! check_domain_exists "$domain"; then
-    domain_json=$(jq -n --arg service "$domain" \
-      '
-    {
-      "service": $service,
-      "error": "Domain does not exist",
-      "error_code": "nxdomain"
-    }
-    ')
-  else
-    if [[ "$PROTOCOL" == "both" || "$PROTOCOL" == "http" ]]; then
-      http_ipv4=$(get_single_check_result "$domain" "HTTP" false 4)
-      if $ipv6_supported; then
-        http_ipv6=$(get_single_check_result "$domain" "HTTP" false 6)
-      fi
+  if [[ "$PROTOCOL" == "both" || "$PROTOCOL" == "http" ]]; then
+    http_ipv4=$(get_single_check_result "$domain" "HTTP" false 4)
+    if $ipv6_supported; then
+      http_ipv6=$(get_single_check_result "$domain" "HTTP" false 6)
     fi
-    if [[ "$PROTOCOL" == "both" || "$PROTOCOL" == "https" ]]; then
-      https_ipv4=$(get_single_check_result "$domain" "HTTPS" true 4)
-      if $ipv6_supported; then
-        https_ipv6=$(get_single_check_result "$domain" "HTTPS" true 6)
-      fi
+  fi
+  if [[ "$PROTOCOL" == "both" || "$PROTOCOL" == "https" ]]; then
+    https_ipv4=$(get_single_check_result "$domain" "HTTPS" true 4)
+    if $ipv6_supported; then
+      https_ipv6=$(get_single_check_result "$domain" "HTTPS" true 6)
     fi
-    domain_json=$(jq -n \
-      --arg service "$domain" \
-      --argjson http_ipv4 "$http_ipv4" \
-      --argjson http_ipv6 "$http_ipv6" \
-      --argjson https_ipv4 "$https_ipv4" \
-      --argjson https_ipv6 "$https_ipv6" \
-      '
+  fi
+
+  jq -n \
+    --arg service "$domain" \
+    --argjson http_ipv4 "$http_ipv4" \
+    --argjson http_ipv6 "$http_ipv6" \
+    --argjson https_ipv4 "$https_ipv4" \
+    --argjson https_ipv6 "$https_ipv6" \
+    '
         {
           "service": $service,
           "http": {
@@ -458,40 +442,36 @@ gather_single_domain_result() {
             "ipv6": $https_ipv6
           }
         }
-        ')
-  fi
+        '
+}
 
-  echo "$domain_json"
+get_domain_ip() {
+  local domain=$1
+  nslookup "$domain" 2>/dev/null | awk '/^Address: / && !/#/ {print $2; exit}' || true
 }
 
 print_single_domain_text_result() {
   local result_item=$1
+  local ip_address=$2
   local domain
-  local error
   local http_result https_result
 
   domain=$(echo "$result_item" | jq -r '.service')
 
   printf "\n--------------------------------\n\n"
-  printf "Testing %b%s%b:\n" "$COLOR_WHITE" "$domain" "$COLOR_RESET"
+  printf "Testing %b%s%b (%s):\n" "$COLOR_WHITE" "$domain" "$COLOR_RESET" "$ip_address"
 
-  error=$(echo "$result_item" | jq -r '.error // ""')
-
-  if [[ -n "$error" ]]; then
-    printf "  %b%s%b\n" "$COLOR_ORANGE" "$error" "$COLOR_RESET"
-  else
-    if [[ "$PROTOCOL" == "both" || "$PROTOCOL" == "http" ]]; then
-      http_result=$(echo "$result_item" | jq -r '.http.ipv4 // .http.ipv6 // {}')
-      http_status=$(echo "$http_result" | jq -r '.status // "000"')
-      http_redirect=$(echo "$http_result" | jq -r '.redirect_url // ""')
-      format_result "HTTP" "$http_status" "$http_redirect"
-    fi
-    if [[ "$PROTOCOL" == "both" || "$PROTOCOL" == "https" ]]; then
-      https_result=$(echo "$result_item" | jq -r '.https.ipv4 // .https.ipv6 // {}')
-      https_status=$(echo "$https_result" | jq -r '.status // "000"')
-      https_redirect=$(echo "$https_result" | jq -r '.redirect_url // ""')
-      format_result "HTTPS" "$https_status" "$https_redirect"
-    fi
+  if [[ "$PROTOCOL" == "both" || "$PROTOCOL" == "http" ]]; then
+    http_result=$(echo "$result_item" | jq -r '.http.ipv4 // .http.ipv6 // {}')
+    http_status=$(echo "$http_result" | jq -r '.status // "000"')
+    http_redirect=$(echo "$http_result" | jq -r '.redirect_url // ""')
+    format_result "HTTP" "$http_status" "$http_redirect"
+  fi
+  if [[ "$PROTOCOL" == "both" || "$PROTOCOL" == "https" ]]; then
+    https_result=$(echo "$result_item" | jq -r '.https.ipv4 // .https.ipv6 // {}')
+    https_status=$(echo "$https_result" | jq -r '.status // "000"')
+    https_redirect=$(echo "$https_result" | jq -r '.redirect_url // ""')
+    format_result "HTTPS" "$https_status" "$https_redirect"
   fi
 }
 
@@ -506,13 +486,36 @@ run_checks_and_print() {
   fi
 
   for domain in "${domains[@]}"; do
+    local ip_address
+    ip_address=$(get_domain_ip "$domain")
+
+    if [[ -z "$ip_address" ]]; then
+      if $JSON_OUTPUT; then
+        local error_json
+        error_json=$(jq -n --arg service "$domain" \
+          '
+          {
+            "service": $service,
+            "error": "Domain does not exist",
+            "error_code": "nxdomain"
+          }
+          ')
+        all_results_json=$(echo "$all_results_json" | jq --argjson item "$error_json" '. + [$item]')
+      else
+        printf "\n--------------------------------\n\n"
+        printf "Testing %b%s%b:\n" "$COLOR_WHITE" "$domain" "$COLOR_RESET"
+        printf "  %bDomain does not exist%b\n" "$COLOR_ORANGE" "$COLOR_RESET"
+      fi
+      continue
+    fi
+
     local domain_result_json
     domain_result_json=$(gather_single_domain_result "$domain")
 
     if $JSON_OUTPUT; then
       all_results_json=$(echo "$all_results_json" | jq --argjson item "$domain_result_json" '. + [$item]')
     else
-      print_single_domain_text_result "$domain_result_json"
+      print_single_domain_text_result "$domain_result_json" "$ip_address"
     fi
   done
 
@@ -536,27 +539,27 @@ run_checks_and_print() {
       --arg ip_version "$ip_version_param_val" \
       --arg protocol "$(if [[ "$PROTOCOL" == "both" ]]; then echo "HTTP and HTTPS"; elif [[ "$PROTOCOL" == "http" ]]; then echo "HTTP only"; else echo "HTTPS only"; fi)" \
       '
-      [
-        {"key":"timeout", "value":$timeout},
-        {"key":"retries", "value":$retries},
-        {"key":"mode", "value":$mode},
-        {"key":"user_agent", "value":$user_agent},
-        {"key":"domain_mode", "value":$domain_mode},
-        {"key":"ip_version", "value":$ip_version},
-        {"key":"protocol", "value":$protocol}
-      ]
-      ')
+          [
+            {"key":"timeout", "value":$timeout},
+            {"key":"retries", "value":$retries},
+            {"key":"mode", "value":$mode},
+            {"key":"user_agent", "value":$user_agent},
+            {"key":"domain_mode", "value":$domain_mode},
+            {"key":"ip_version", "value":$ip_version},
+            {"key":"protocol", "value":$protocol}
+          ]
+          ')
 
     jq -n \
       --argjson params "$params_json" \
       --argjson results "$all_results_json" \
       '
-        {
-          "version": 1,
-          "params": $params,
-          "results": $results
-        }
-        '
+            {
+              "version": 1,
+              "params": $params,
+              "results": $results
+            }
+            '
   fi
 }
 
