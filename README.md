@@ -34,6 +34,7 @@ The script contains predefined lists of websites commonly affected by:
 - bash
 - curl
 - nslookup
+- netcat
 
 ## Usage
 
