@@ -53,7 +53,8 @@ readonly GEO_BLOCKED_SITES=(
 )
 
 readonly MSG_AVAILABLE="Available"
-readonly MSG_BLOCKED_TEMPLATE="Blocked or site didn't respond after %ss timeout"
+readonly MSG_BLOCKED="Blocked"
+readonly MSG_BLOCKED_TEMPLATE="$MSG_BLOCKED or site didn't respond after %ss timeout"
 readonly MSG_REDIRECT="Redirected"
 readonly MSG_ACCESS_DENIED="Denied"
 readonly MSG_OTHER="Responded with status code"
@@ -450,6 +451,26 @@ get_domain_ip() {
   nslookup "$domain" 2>/dev/null | awk '/^Address: / && !/#/ {print $2; exit}' || true
 }
 
+is_ip_reachable() {
+  local ip="$1"
+  nc -z -w "$TIMEOUT" "$ip" 443 2>/dev/null
+}
+
+print_ip_status() {
+  local ip="$1"
+  local status color
+
+  if is_ip_reachable "$ip"; then
+    status="$MSG_AVAILABLE"
+    color="$COLOR_GREEN"
+  else
+    status="$MSG_BLOCKED"
+    color="$COLOR_RED"
+  fi
+
+  printf "  %bIP connectivity%b: %b%s%b\n" "$COLOR_WHITE" "$COLOR_RESET" "$color" "$status" "$COLOR_RESET"
+}
+
 print_single_domain_text_result() {
   local result_item=$1
   local ip_address=$2
@@ -460,6 +481,8 @@ print_single_domain_text_result() {
 
   printf "\n--------------------------------\n\n"
   printf "Testing %b%s%b (%s):\n" "$COLOR_WHITE" "$domain" "$COLOR_RESET" "$ip_address"
+
+  print_ip_status "$ip_address"
 
   if [[ "$PROTOCOL" == "both" || "$PROTOCOL" == "http" ]]; then
     http_result=$(echo "$result_item" | jq -r '.http.ipv4 // .http.ipv6 // {}')
@@ -492,19 +515,41 @@ run_checks_and_print() {
     if [[ -z "$ip_address" ]]; then
       if $JSON_OUTPUT; then
         local error_json
-        error_json=$(jq -n --arg service "$domain" \
-          '
-          {
-            "service": $service,
-            "error": "Domain does not exist",
-            "error_code": "nxdomain"
-          }
-          ')
+        error_json=$(jq -n --arg service "$domain" '
+                    {
+                        "service": $service,
+                        "error": "Domain does not exist",
+                        "error_code": "nxdomain",
+                        "http": null,
+                        "https": null
+                    }
+                ')
         all_results_json=$(echo "$all_results_json" | jq --argjson item "$error_json" '. + [$item]')
       else
         printf "\n--------------------------------\n\n"
         printf "Testing %b%s%b:\n" "$COLOR_WHITE" "$domain" "$COLOR_RESET"
         printf "  %bDomain does not exist%b\n" "$COLOR_ORANGE" "$COLOR_RESET"
+      fi
+      continue
+    fi
+
+    if ! is_ip_reachable "$ip_address"; then
+      if $JSON_OUTPUT; then
+        local error_json
+        error_json=$(jq -n --arg service "$domain" '
+                    {
+                        "service": $service,
+                        "error": "Blocked by IP",
+                        "error_code": "blocked_by_ip",
+                        "http": null,
+                        "https": null
+                    }
+                ')
+        all_results_json=$(echo "$all_results_json" | jq --argjson item "$error_json" '. + [$item]')
+      else
+        printf "\n--------------------------------\n\n"
+        printf "Testing %b%s%b (%s):\n" "$COLOR_WHITE" "$domain" "$COLOR_RESET" "$ip_address"
+        print_ip_status "$ip_address"
       fi
       continue
     fi
@@ -539,25 +584,25 @@ run_checks_and_print() {
       --arg ip_version "$ip_version_param_val" \
       --arg protocol "$(if [[ "$PROTOCOL" == "both" ]]; then echo "HTTP and HTTPS"; elif [[ "$PROTOCOL" == "http" ]]; then echo "HTTP only"; else echo "HTTPS only"; fi)" \
       '
-          [
-            {"key":"timeout", "value":$timeout},
-            {"key":"retries", "value":$retries},
-            {"key":"mode", "value":$mode},
-            {"key":"user_agent", "value":$user_agent},
-            {"key":"domain_mode", "value":$domain_mode},
-            {"key":"ip_version", "value":$ip_version},
-            {"key":"protocol", "value":$protocol}
-          ]
-          ')
+            [
+                {"key":"timeout", "value":$timeout},
+                {"key":"retries", "value":$retries},
+                {"key":"mode", "value":$mode},
+                {"key":"user_agent", "value":$user_agent},
+                {"key":"domain_mode", "value":$domain_mode},
+                {"key":"ip_version", "value":$ip_version},
+                {"key":"protocol", "value":$protocol}
+            ]
+            ')
 
     jq -n \
       --argjson params "$params_json" \
       --argjson results "$all_results_json" \
       '
             {
-              "version": 1,
-              "params": $params,
-              "results": $results
+                "version": 1,
+                "params": $params,
+                "results": $results
             }
             '
   fi
