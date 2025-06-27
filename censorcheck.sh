@@ -471,6 +471,75 @@ print_ip_status() {
   printf "  %bIP connectivity%b: %b%s%b\n" "$COLOR_WHITE" "$COLOR_RESET" "$color" "$status" "$COLOR_RESET"
 }
 
+print_domain_header() {
+  local domain="$1"
+  local ip_address="$2"
+
+  printf "\n--------------------------------\n\n"
+  printf "Testing %b%s%b (%s):\n" "$COLOR_WHITE" "$domain" "$COLOR_RESET" "$ip_address"
+}
+
+print_domain_error() {
+  local domain="$1"
+  local ip_address="$2"
+  local error_code="$3"
+
+  print_domain_header "$domain" "$ip_address"
+
+  case "$error_code" in
+    nxdomain)
+      printf "  %bDomain does not exist%b\n" "$COLOR_ORANGE" "$COLOR_RESET"
+      ;;
+    blocked_by_ip)
+      print_ip_status "$ip_address"
+      ;;
+    *)
+      printf "  %bUnknown error%b\n" "$COLOR_RED" "$COLOR_RESET"
+      ;;
+  esac
+}
+
+make_json_error() {
+  local domain="$1"
+  local error_code="$2"
+
+  case "$error_code" in
+    nxdomain)
+      jq -n --arg service "$domain" '
+        {
+          "service": $service,
+          "error": "Domain does not exist",
+          "error_code": "nxdomain",
+          "http": null,
+          "https": null
+        }
+      '
+      ;;
+    blocked_by_ip)
+      jq -n --arg service "$domain" '
+        {
+          "service": $service,
+          "error": "Blocked by IP",
+          "error_code": "blocked_by_ip",
+          "http": null,
+          "https": null
+        }
+      '
+      ;;
+    *)
+      jq -n --arg service "$domain" --arg code "$error_code" '
+        {
+          "service": $service,
+          "error": "Unknown error",
+          "error_code": $code,
+          "http": null,
+          "https": null
+        }
+      '
+      ;;
+  esac
+}
+
 print_single_domain_text_result() {
   local result_item=$1
   local ip_address=$2
@@ -478,11 +547,6 @@ print_single_domain_text_result() {
   local http_result https_result
 
   domain=$(echo "$result_item" | jq -r '.service')
-
-  printf "\n--------------------------------\n\n"
-  printf "Testing %b%s%b (%s):\n" "$COLOR_WHITE" "$domain" "$COLOR_RESET" "$ip_address"
-
-  print_ip_status "$ip_address"
 
   if [[ "$PROTOCOL" == "both" || "$PROTOCOL" == "http" ]]; then
     http_result=$(echo "$result_item" | jq -r '.http.ipv4 // .http.ipv6 // {}')
@@ -514,42 +578,18 @@ run_checks_and_print() {
 
     if [[ -z "$ip_address" ]]; then
       if $JSON_OUTPUT; then
-        local error_json
-        error_json=$(jq -n --arg service "$domain" '
-                    {
-                        "service": $service,
-                        "error": "Domain does not exist",
-                        "error_code": "nxdomain",
-                        "http": null,
-                        "https": null
-                    }
-                ')
-        all_results_json=$(echo "$all_results_json" | jq --argjson item "$error_json" '. + [$item]')
+        all_results_json=$(echo "$all_results_json" | jq --argjson item "$(make_json_error "$domain" nxdomain)" '. + [$item]')
       else
-        printf "\n--------------------------------\n\n"
-        printf "Testing %b%s%b:\n" "$COLOR_WHITE" "$domain" "$COLOR_RESET"
-        printf "  %bDomain does not exist%b\n" "$COLOR_ORANGE" "$COLOR_RESET"
+        print_domain_error "$domain" "" nxdomain
       fi
       continue
     fi
 
     if ! is_ip_reachable "$ip_address"; then
       if $JSON_OUTPUT; then
-        local error_json
-        error_json=$(jq -n --arg service "$domain" '
-                    {
-                        "service": $service,
-                        "error": "Blocked by IP",
-                        "error_code": "blocked_by_ip",
-                        "http": null,
-                        "https": null
-                    }
-                ')
-        all_results_json=$(echo "$all_results_json" | jq --argjson item "$error_json" '. + [$item]')
+        all_results_json=$(echo "$all_results_json" | jq --argjson item "$(make_json_error "$domain" blocked_by_ip)" '. + [$item]')
       else
-        printf "\n--------------------------------\n\n"
-        printf "Testing %b%s%b (%s):\n" "$COLOR_WHITE" "$domain" "$COLOR_RESET" "$ip_address"
-        print_ip_status "$ip_address"
+        print_domain_error "$domain" "$ip_address" blocked_by_ip
       fi
       continue
     fi
@@ -560,6 +600,8 @@ run_checks_and_print() {
     if $JSON_OUTPUT; then
       all_results_json=$(echo "$all_results_json" | jq --argjson item "$domain_result_json" '. + [$item]')
     else
+      print_domain_header "$domain" "$ip_address"
+      print_ip_status "$ip_address"
       print_single_domain_text_result "$domain_result_json" "$ip_address"
     fi
   done
