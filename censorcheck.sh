@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 readonly SCRIPT_NAME=$(basename "$0")
+readonly DEPENDENCIES=("curl" "nslookup" "netcat")
 readonly COLOR_WHITE="\033[97m"
 readonly COLOR_RED="\033[31m"
 readonly COLOR_GREEN="\033[32m"
@@ -59,6 +60,12 @@ readonly MSG_REDIRECT="Redirected"
 readonly MSG_ACCESS_DENIED="Denied"
 readonly MSG_OTHER="Responded with status code"
 
+declare -A DEPENDENCY_COMMANDS=(
+  [curl]="curl"
+  [nslookup]="nslookup"
+  [netcat]="nc"
+)
+
 error_exit() {
   local message="$1"
   local exit_code="${2:-1}"
@@ -102,6 +109,146 @@ Examples:
 
 The domain file should contain one domain per line. Lines starting with # are ignored
 EOF
+}
+
+is_installed() {
+  local cmd="$1"
+  command -v "$cmd" >/dev/null 2>&1
+}
+
+check_missing_dependencies() {
+  local missing_pkgs=()
+  local cmd
+
+  for pkg in "${DEPENDENCIES[@]}"; do
+    cmd="${DEPENDENCY_COMMANDS[$pkg]:-$pkg}"
+    if ! is_installed "$cmd"; then
+      missing_pkgs+=("$pkg")
+    fi
+  done
+
+  echo "${missing_pkgs[@]}"
+}
+
+prompt_for_installation() {
+  local missing_pkgs=("$@")
+
+  echo "Missing dependencies: ${missing_pkgs[*]}"
+  read -r -p "Do you want to install them? [y/N]: " answer
+  answer=${answer,,}
+
+  case "${answer,,}" in
+    y | yes)
+      return 0
+      ;;
+    *)
+      exit 0
+      ;;
+  esac
+}
+
+get_package_manager() {
+  # Check if the script is running in Termux
+  if [[ -d /data/data/com.termux ]]; then
+    echo "termux"
+    return
+  fi
+
+  if [[ -f /etc/os-release ]]; then
+    . /etc/os-release
+    case "$ID" in
+      debian | ubuntu)
+        echo "apt"
+        ;;
+      arch)
+        echo "pacman"
+        ;;
+      fedora)
+        echo "dnf"
+        ;;
+      *)
+        error_exit "Unknown distribution: $ID. Please install dependencies manually."
+        ;;
+    esac
+  else
+    error_exit "File /etc/os-release not found, unable to determine distribution. Please install dependencies manually."
+  fi
+}
+
+install_with_package_manager() {
+  local pkg_manager="$1"
+  local use_sudo=""
+  local packages=()
+  shift
+
+  for dep in "$@"; do
+    case "$pkg_manager" in
+      apt | termux)
+        case "$dep" in
+          nslookup) packages+=("dnsutils") ;;
+          netcat) packages+=("netcat-openbsd") ;;
+          *) packages+=("$dep") ;;
+        esac
+        ;;
+      pacman)
+        case "$dep" in
+          nslookup) packages+=("bind") ;;
+          netcat) packages+=("openbsd-netcat") ;;
+          *) packages+=("$dep") ;;
+        esac
+        ;;
+      dnf)
+        case "$dep" in
+          nslookup) packages+=("bind-utils") ;;
+          netcat) packages+=("netcat") ;;
+          *) packages+=("$dep") ;;
+        esac
+        ;;
+      *)
+        packages+=("$dep")
+        ;;
+    esac
+  done
+
+  if [[ "${EUID:-$(id -u)}" -ne 0 ]]; then
+    use_sudo="sudo"
+  fi
+
+  case "$pkg_manager" in
+    apt)
+      $use_sudo apt update
+      $use_sudo env NEEDRESTART_MODE=a apt install -y "${packages[@]}"
+      ;;
+    pacman)
+      $use_sudo pacman -Syy --noconfirm "${packages[@]}"
+      ;;
+    dnf)
+      $use_sudo dnf install -y "${packages[@]}"
+      ;;
+    termux)
+      apt update
+      apt install -y "${packages[@]}"
+      ;;
+    *)
+      error_exit "Unknown package manager: $pkg_manager"
+      ;;
+  esac
+}
+
+install_dependencies() {
+  local missing_packages
+  local pkg_manager
+
+  read -r -a missing_packages <<<"$(check_missing_dependencies)"
+
+  if [[ ${#missing_packages[@]} -eq 0 ]]; then
+    return 0
+  fi
+
+  prompt_for_installation "${missing_packages[@]}"
+
+  pkg_manager=$(get_package_manager)
+  install_with_package_manager "$pkg_manager" "${missing_packages[@]}"
 }
 
 check_ipv6_support() {
@@ -652,7 +799,7 @@ run_checks_and_print() {
 
 main() {
   set -euo pipefail
-
+  install_dependencies
   parse_arguments "$@"
   run_checks_and_print
 }
