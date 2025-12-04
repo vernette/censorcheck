@@ -884,19 +884,18 @@ run_checks_and_print() {
         --arg mode "${MODE^^}" \
         --arg user_agent "$USER_AGENT" \
         --arg domain_mode "$(if [[ -n "$DOMAINS_FILE" ]]; then echo "user domains from $DOMAINS_FILE"; elif [[ -n "$SINGLE_DOMAIN" ]]; then echo "single domain"; else echo "predefined domains"; fi)" \
-        --arg ip_version "$ip_version_param_val"
-
-      --arg protocol "$(if [[ "$PROTOCOL" == "both" ]]; then echo "HTTP and HTTPS"; elif [[ "$PROTOCOL" == "http" ]]; then echo "HTTP only"; else echo "HTTPS only"; fi)" \
+        --arg ip_version "$ip_version_param_val" \
+        --arg protocol "$(if [[ "$PROTOCOL" == "both" ]]; then echo "HTTP and HTTPS"; elif [[ "$PROTOCOL" == "http" ]]; then echo "HTTP only"; else echo "HTTPS only"; fi)" \
         '[
-				{"key":"timeout", "value":$timeout},
+          {"key":"timeout", "value":$timeout},
 
-				{"key":"retries", "value":$retries},
-				{"key":"mode", "value":$mode},
-				{"key":"user_agent", "value":$user_agent},
-				{"key":"domain_mode", "value":$domain_mode},
-				{"key":"ip_version", "value":$ip_version},
-				{"key":"protocol", "value":$protocol}
-			]'
+          {"key":"retries", "value":$retries},
+          {"key":"mode", "value":$mode},
+          {"key":"user_agent", "value":$user_agent},
+          {"key":"domain_mode", "value":$domain_mode},
+          {"key":"ip_version", "value":$ip_version},
+          {"key":"protocol", "value":$protocol}
+        ]'
     )
 
     jq -n \
