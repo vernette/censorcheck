@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 readonly SCRIPT_NAME=$(basename "$0")
-readonly DEPENDENCIES=("curl" "nslookup" "netcat")
+readonly DEPENDENCIES=("curl" "nslookup" "netcat" "jq")
 
 readonly COLOR_WHITE="\033[97m"
 readonly COLOR_RED="\033[31m"
