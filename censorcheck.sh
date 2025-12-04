@@ -28,7 +28,6 @@ readonly DPI_BLOCKED_SITES=(
   "instagram.com"
   "facebook.com"
   "x.com"
-  "patreon.com"
   "linkedin.com"
   "rutracker.org"
   "nnmclub.to"
@@ -45,6 +44,7 @@ readonly DPI_BLOCKED_SITES=(
 readonly GEO_BLOCKED_SITES=(
   "spotify.com"
   "netflix.com"
+  "patreon.com"
   "swagger.io"
   "snyk.io"
   "mongodb.com"
