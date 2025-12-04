@@ -441,6 +441,7 @@ execute_curl() {
   local curl_output
   local curl_opts=(
     -s
+    --compressed
     -o /dev/null
     -w "%{http_code}${CURL_SEPARATOR}%{redirect_url}"
     --retry-connrefused
@@ -452,7 +453,6 @@ execute_curl() {
     -A "$USER_AGENT"
     -H "Sec-Fetch-Site: none"
     -H "Accept-Language: en-US,en;q=0.5"
-    -H "Accept-Encoding: gzip, deflate, br, zstd"
   )
 
   if [ -n "$PROXY" ]; then
