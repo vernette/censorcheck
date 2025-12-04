@@ -33,7 +33,7 @@ readonly DPI_BLOCKED_SITES=(
   "nnmclub.to"
   "digitalocean.com"
   "medium.com"
-  "ntc.party"
+  # "ntc.party"
   "amnezia.org"
   "getoutline.org"
   "mailfence.com"
