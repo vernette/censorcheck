@@ -32,7 +32,6 @@ readonly DPI_BLOCKED_SITES=(
   "rutracker.org"
   "nnmclub.to"
   "digitalocean.com"
-  "medium.com"
   # "ntc.party"
   "amnezia.org"
   "getoutline.org"
