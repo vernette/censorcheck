@@ -202,6 +202,9 @@ get_package_manager() {
       fedora)
         echo "dnf"
         ;;
+      centos | rhel | rocky | almalinux)
+        if command -v dnf >/dev/null 2>&1; then echo "dnf"; else echo "yum"; fi
+        ;;
       *)
         error_exit "Unknown distribution: $ID. Please install dependencies manually."
         ;;
@@ -233,7 +236,7 @@ install_with_package_manager() {
           *) packages+=("$dep") ;;
         esac
         ;;
-      dnf)
+      dnf | yum)
         case "$dep" in
           nslookup) packages+=("bind-utils") ;;
           netcat) packages+=("netcat") ;;
@@ -260,6 +263,9 @@ install_with_package_manager() {
       ;;
     dnf)
       $use_sudo dnf install -y "${packages[@]}"
+      ;;
+    yum)
+      $use_sudo yum install -y "${packages[@]}"
       ;;
     termux)
       apt update
@@ -397,8 +403,8 @@ print_header() {
 
  ██████╗███████╗███╗   ██╗███████╗ ██████╗ ██████╗  ██████╗██╗  ██╗███████╗ ██████╗██╗  ██╗
 ██╔════╝██╔════╝████╗  ██║██╔════╝██╔═══██╗██╔══██╗██╔════╝██║  ██║██╔════╝██╔════╝██║ ██╔╝
-██║     █████╗  ██╔██╗ ██║███████╗██║   ██║██████╔╝██║     ███████║█████╗  ██║     █████╔╝ 
-██║     ██╔══╝  ██║╚██╗██║╚════██║██║   ██║██╔══██╗██║     ██╔══██║██╔══╝  ██║     ██╔═██╗ 
+██║     █████╗  ██╔██╗ ██║███████╗██║   ██║██████╔╝██║     ███████║█████╗  ██║     █████╔╝
+██║     ██╔══╝  ██║╚██╗██║╚════██║██║   ██║██╔══██╗██║     ██╔══██║██╔══╝  ██║     ██╔═██╗
 ╚██████╗███████╗██║ ╚████║███████║╚██████╔╝██║  ██║╚██████╗██║  ██║███████╗╚██████╗██║  ██╗
  ╚═════╝╚══════╝╚═╝  ╚═══╝╚══════╝ ╚═════╝ ╚═╝  ╚═╝ ╚═════╝╚═╝  ╚═╝╚══════╝ ╚═════╝╚═╝  ╚═╝
 
