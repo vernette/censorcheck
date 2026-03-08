@@ -220,7 +220,7 @@ install_with_package_manager() {
   local use_sudo=""
   local packages=()
   shift
-		
+
   for dep in "$@"; do
     case "$pkg_manager" in
       apt | termux)
