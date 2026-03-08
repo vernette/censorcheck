@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 readonly SCRIPT_NAME=$(basename "$0")
-readonly DEPENDENCIES=("curl" "nslookup" "netcat" "jq")
+readonly DEPENDENCIES=("curl" "nslookup" "netcat" "jq" "column")
 
 readonly COLOR_WHITE="\033[97m"
 readonly COLOR_RED="\033[31m"
@@ -72,6 +72,7 @@ declare -A DEPENDENCY_COMMANDS=(
   [curl]="curl"
   [nslookup]="nslookup"
   [netcat]="nc"
+  [column]="column"
 )
 
 error_exit() {
@@ -226,6 +227,7 @@ install_with_package_manager() {
         case "$dep" in
           nslookup) packages+=("dnsutils") ;;
           netcat) packages+=("netcat-openbsd") ;;
+		  column) packages+=("bsdextrautils") ;;
           *) packages+=("$dep") ;;
         esac
         ;;
@@ -233,6 +235,7 @@ install_with_package_manager() {
         case "$dep" in
           nslookup) packages+=("bind") ;;
           netcat) packages+=("openbsd-netcat") ;;
+		  column) packages+=("util-linux") ;;
           *) packages+=("$dep") ;;
         esac
         ;;
@@ -240,6 +243,7 @@ install_with_package_manager() {
         case "$dep" in
           nslookup) packages+=("bind-utils") ;;
           netcat) packages+=("netcat") ;;
+		  column) packages+=("util-linux") ;;
           *) packages+=("$dep") ;;
         esac
         ;;
