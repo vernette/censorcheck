@@ -45,6 +45,7 @@ readonly DPI_BLOCKED_SITES=(
   "mailfence.com"
   "flibusta.is"
   "rezka.ag"
+  "api.telegram.org"
 )
 
 readonly GEO_BLOCKED_SITES=(
