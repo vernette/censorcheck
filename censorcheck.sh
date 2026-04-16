@@ -58,6 +58,7 @@ readonly GEO_BLOCKED_SITES=(
   "autodesk.com"
   "graylog.org"
   "redis.io"
+  "copilot.microsoft.com"
 )
 
 readonly MSG_AVAILABLE="Available"
