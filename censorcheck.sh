@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 readonly SCRIPT_NAME=$(basename "$0")
-readonly DEPENDENCIES=("curl" "nslookup" "netcat" "jq" "column")
+readonly DEPENDENCIES=("curl" "nslookup" "jq" "column")
 
 readonly COLOR_WHITE="\033[97m"
 readonly COLOR_RED="\033[31m"
@@ -72,7 +72,6 @@ declare -a TEXT_RESULTS=()
 declare -A DEPENDENCY_COMMANDS=(
   [curl]="curl"
   [nslookup]="nslookup"
-  [netcat]="nc"
   [column]="column"
 )
 
@@ -227,24 +226,21 @@ install_with_package_manager() {
       apt | termux)
         case "$dep" in
           nslookup) packages+=("dnsutils") ;;
-          netcat) packages+=("netcat-openbsd") ;;
-		  column) packages+=("bsdextrautils") ;;
+          column) packages+=("bsdextrautils") ;;
           *) packages+=("$dep") ;;
         esac
         ;;
       pacman)
         case "$dep" in
           nslookup) packages+=("bind") ;;
-          netcat) packages+=("openbsd-netcat") ;;
-		  column) packages+=("util-linux") ;;
+          column) packages+=("util-linux") ;;
           *) packages+=("$dep") ;;
         esac
         ;;
       dnf | yum)
         case "$dep" in
           nslookup) packages+=("bind-utils") ;;
-          netcat) packages+=("netcat") ;;
-		  column) packages+=("util-linux") ;;
+          column) packages+=("util-linux") ;;
           *) packages+=("$dep") ;;
         esac
         ;;
@@ -629,10 +625,15 @@ gather_single_domain_result() {
         '
 }
 
+get_record_type() {
+  [[ "$IP_VERSION" == "6" ]] && echo "AAAA" || echo "A"
+}
+
 get_domain_ip() {
   local domain=$1
-  local ip
-  nslookup "$domain" | awk '/^Address: / && !/#/ {print $2; exit}' || true
+
+  nslookup -type="$(get_record_type)" "$domain" |
+    awk '/^Address: / && !/#/ {print $2; exit}' || true
 }
 
 get_domain_ips_via_dns() {
@@ -641,12 +642,12 @@ get_domain_ips_via_dns() {
   local output
 
   if [[ -n "$server" ]]; then
-    output=$(nslookup "$domain" "$server" 2>/dev/null)
+    output=$(nslookup -type="$(get_record_type)" "$domain" "$server" 2>/dev/null)
   else
-    output=$(nslookup "$domain" 2>/dev/null)
+    output=$(nslookup -type="$(get_record_type)" "$domain" 2>/dev/null)
   fi
 
-  awk '/Address:/ && !/#/ && !/[:].*[:]/ {print $2}' <<<"$output" || true
+  awk '/Address:/ && !/#/ {print $2}' <<<"$output" || true
 }
 
 get_domain_ips_via_doh() {
@@ -654,7 +655,7 @@ get_domain_ips_via_doh() {
   local doh_server=$2
 
   curl -s -H "accept: application/dns-json" \
-    "${doh_server}?name=${domain}&type=A" |
+    "${doh_server}?name=${domain}&type=$(get_record_type)" |
     jq -r '.Answer[]?.data // empty' 2>/dev/null
 }
 
@@ -723,7 +724,8 @@ check_dns_hijacking() {
 
 is_ip_reachable() {
   local ip="$1"
-  nc -z -w "$TIMEOUT" "$ip" 443 2>/dev/null
+  (echo >/dev/tcp/"$ip"/80) 2>/dev/null ||
+    (echo >/dev/tcp/"$ip"/443) 2>/dev/null
 }
 
 make_json_error() {
@@ -837,10 +839,10 @@ summarize_protocol_result() {
   fi
 
   local data
-  data=$(jq -c --arg protocol "$protocol" '
-      if .[$protocol].ipv4 != null then .[$protocol].ipv4
-      elif .[$protocol].ipv6 != null then .[$protocol].ipv6
-      else null end
+  data=$(jq -c --arg protocol "$protocol" --arg ip_version "$IP_VERSION" '
+      if $ip_version == "6" then .[$protocol].ipv6
+      else .[$protocol].ipv4
+      end
     ' <<<"$result_json")
 
   if [[ "$data" == "null" || -z "$data" ]]; then
