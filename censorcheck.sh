@@ -64,6 +64,8 @@ readonly GEO_BLOCKED_SITES=(
 readonly MSG_AVAILABLE="Available"
 readonly MSG_BLOCKED="Blocked"
 readonly MSG_BLOCKED_TEMPLATE="$MSG_BLOCKED or site didn't respond after %ss timeout"
+readonly MSG_BLOCKED_BY_IP="$MSG_BLOCKED by IP"
+readonly MSG_BLOCKED_BY_PORT="$MSG_BLOCKED by port"
 readonly MSG_REDIRECT="Redirected"
 readonly MSG_ACCESS_DENIED="Denied"
 readonly MSG_OTHER="Responded with status code"
@@ -570,6 +572,17 @@ get_single_check_result() {
   local ip_version=$4
   local response status_code redirect_url
 
+  local port
+  [[ "${protocol,,}" == "https" ]] && port=443 || port=80
+
+  local ip
+  ip=$(get_domain_ip "$domain")
+
+  if [[ -n "$ip" ]] && ! is_port_open "$ip" "$port"; then
+    jq -n '{"status": -1, "redirect_url": null}'
+    return
+  fi
+
   response=$(execute_curl "$domain" "$protocol" "$follow_redirects" "$ip_version")
   status_code="${response%%$CURL_SEPARATOR*}"
   redirect_url="${response#*$CURL_SEPARATOR}"
@@ -723,10 +736,15 @@ check_dns_hijacking() {
   fi
 }
 
+is_port_open() {
+  local ip="$1"
+  local port="$2"
+  timeout 1 bash -c "(echo >/dev/tcp/$ip/$port)" 2>/dev/null
+}
+
 is_ip_reachable() {
   local ip="$1"
-  (echo >/dev/tcp/"$ip"/80) 2>/dev/null ||
-    (echo >/dev/tcp/"$ip"/443) 2>/dev/null
+  is_port_open "$ip" 80 || is_port_open "$ip" 443
 }
 
 make_json_error() {
@@ -775,7 +793,9 @@ summarize_status_description() {
   local redirect_url=$2
   local msg
 
-  if [[ -z "$status_code" || "$status_code" = "000" || "$status_code" -eq 0 ]]; then
+  if [[ "$status_code" -eq -1 ]]; then
+    msg="$MSG_BLOCKED_BY_PORT"
+  elif [[ -z "$status_code" || "$status_code" = "000" || "$status_code" -eq 0 ]]; then
     msg=$(printf "$MSG_BLOCKED_TEMPLATE" "$TIMEOUT")
   elif [[ "$status_code" -ge 300 && "$status_code" -lt 400 ]]; then
     [[ -z "$redirect_url" ]] && redirect_url="<empty>"
@@ -953,7 +973,7 @@ run_checks_and_print() {
       if $JSON_OUTPUT; then
         all_results_json=$(echo "$all_results_json" | jq --argjson item "$(make_json_error "$domain" blocked_by_ip)" '. + [$item]')
       else
-        add_text_result_row "$domain" "$ip_address" "Blocked by IP" "Blocked by IP"
+        add_text_result_row "$domain" "$ip_address" "$MSG_BLOCKED_BY_IP" "$MSG_BLOCKED_BY_IP"
       fi
       continue
     fi
