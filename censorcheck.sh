@@ -46,6 +46,7 @@ readonly DPI_BLOCKED_SITES=(
   "flibusta.is"
   "rezka.ag"
   "api.telegram.org"
+  "play.google.com"
 )
 
 readonly GEO_BLOCKED_SITES=(
