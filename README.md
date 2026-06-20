@@ -38,12 +38,34 @@ The script contains predefined lists of websites commonly affected by:
 
 ## Usage
 
-For local usage, download the script:
+### Download and run locally
 
 ```bash
-wget https://github.com/vernette/censorcheck/raw/master/censorcheck.sh
+wget -O censorcheck.sh https://censorcheck.vrnt.xyz
 chmod +x censorcheck.sh
 ```
+
+### Run directly
+
+```bash
+bash <(wget -qO- https://censorcheck.vrnt.xyz) --mode dpi
+```
+
+### Mirror (proxy through server)
+
+If direct access to GitHub is unreliable or slow for you, use the mirror domain. It fetches the script through the server instead of redirecting you to GitHub:
+
+```bash
+# Download and run locally
+wget -O censorcheck.sh https://censorcheck.mirror.vrnt.xyz
+chmod +x censorcheck.sh
+
+# Run directly
+bash <(wget -qO- https://censorcheck.mirror.vrnt.xyz) --mode dpi
+```
+
+> [!NOTE]
+> Unlike `censorcheck.vrnt.xyz`, which simply redirects to GitHub, `censorcheck.mirror.vrnt.xyz` proxies the request through the server (client -> server -> GitHub). Use it when the primary domain works poorly due to GitHub connectivity issues
 
 ### Common Use Cases
 
