@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 readonly SCRIPT_NAME=$(basename "$0")
-readonly DEPENDENCIES=("curl" "nslookup" "jq" "column")
+readonly DEPENDENCIES=("curl" "nslookup" "dig" "jq" "column")
 
 readonly COLOR_WHITE="\033[97m"
 readonly COLOR_RED="\033[31m"
@@ -11,12 +11,16 @@ readonly COLOR_ORANGE="\033[33m"
 readonly COLOR_RESET="\033[0m"
 readonly CURL_SEPARATOR="--UNIQUE-SEPARATOR--"
 
-readonly DNS_SERVERS=("1.1.1.1" "8.8.8.8" "9.9.9.9")
-readonly DOH_SERVERS=(
-  "https://cloudflare-dns.com/dns-query"
-  "https://dns.google/dns-query"
-  "https://dns.quad9.net/dns-query"
+readonly DNS_SERVERS=("1.1.1.1" "8.8.8.8" "9.9.9.9" "77.88.8.8")
+readonly ENCRYPTED_DNS_SERVERS=(
+  "Cloudflare|1.1.1.1"
+  "Google|8.8.8.8"
+  "Quad9|9.9.9.9"
+  "Yandex|77.88.8.8"
 )
+
+AVAILABLE_DOH=()
+AVAILABLE_DOT=()
 
 # Default values
 TIMEOUT=5
@@ -76,6 +80,7 @@ declare -a TEXT_RESULTS=()
 declare -A DEPENDENCY_COMMANDS=(
   [curl]="curl"
   [nslookup]="nslookup"
+  [dig]="dig"
   [column]="column"
 )
 
@@ -229,21 +234,21 @@ install_with_package_manager() {
     case "$pkg_manager" in
       apt | termux)
         case "$dep" in
-          nslookup) packages+=("dnsutils") ;;
+          nslookup | dig) packages+=("dnsutils") ;;
           column) packages+=("bsdextrautils") ;;
           *) packages+=("$dep") ;;
         esac
         ;;
       pacman)
         case "$dep" in
-          nslookup) packages+=("bind") ;;
+          nslookup | dig) packages+=("bind") ;;
           column) packages+=("util-linux") ;;
           *) packages+=("$dep") ;;
         esac
         ;;
       dnf | yum)
         case "$dep" in
-          nslookup) packages+=("bind-utils") ;;
+          nslookup | dig) packages+=("bind-utils") ;;
           column) packages+=("util-linux") ;;
           *) packages+=("$dep") ;;
         esac
@@ -450,6 +455,7 @@ print_header() {
       ;;
   esac
 
+  check_encrypted_dns_servers
   check_dns_hijacking
 }
 
@@ -665,13 +671,14 @@ get_domain_ips_via_dns() {
   awk '/Address:/ && !/#/ {print $2}' <<<"$output" || true
 }
 
-get_domain_ips_via_doh() {
+resolve_via_dig() {
   local domain=$1
-  local doh_server=$2
+  local server_ip=$2
+  local transport=$3
 
-  curl -s -H "accept: application/dns-json" \
-    "${doh_server}?name=${domain}&type=$(get_record_type)" |
-    jq -r '.Answer[]?.data // empty' 2>/dev/null
+  dig +short +"$transport" @"$server_ip" "$domain" "$(get_record_type)" \
+    +timeout="$TIMEOUT" +tries=1 2>/dev/null |
+    awk '/^[0-9a-fA-F.:]+$/'
 }
 
 have_ip_intersection() {
@@ -692,30 +699,113 @@ have_ip_intersection() {
   return 1
 }
 
+probe_resolver_transport() {
+  if [[ -n "$(resolve_via_dig "$1" "$2" "$3")" ]]; then
+    echo "available"
+  else
+    echo "blocked"
+  fi
+}
+
+check_encrypted_dns_servers() {
+  local test_domain="rutracker.org"
+  local entry name ip doh_status dot_status
+  local table_rows=()
+  local i tmp_dir
+
+  AVAILABLE_DOH=()
+  AVAILABLE_DOT=()
+
+  tmp_dir=$(mktemp -d)
+
+  for i in "${!ENCRYPTED_DNS_SERVERS[@]}"; do
+    ip="${ENCRYPTED_DNS_SERVERS[$i]##*|}"
+    probe_resolver_transport "$test_domain" "$ip" "https" >"$tmp_dir/${i}_https" &
+    probe_resolver_transport "$test_domain" "$ip" "tls" >"$tmp_dir/${i}_tls" &
+  done
+  wait
+
+  for i in "${!ENCRYPTED_DNS_SERVERS[@]}"; do
+    entry="${ENCRYPTED_DNS_SERVERS[$i]}"
+    name="${entry%%|*}"
+    ip="${entry##*|}"
+
+    if [[ "$(<"$tmp_dir/${i}_https")" == "available" ]]; then
+      AVAILABLE_DOH+=("$entry")
+      doh_status="$MSG_AVAILABLE"
+    else
+      doh_status="$MSG_BLOCKED"
+    fi
+
+    if [[ "$(<"$tmp_dir/${i}_tls")" == "available" ]]; then
+      AVAILABLE_DOT+=("$entry")
+      dot_status="$MSG_AVAILABLE"
+    else
+      dot_status="$MSG_BLOCKED"
+    fi
+
+    table_rows+=("$(printf "%s%b\t%s\t%s\t%s" \
+      "$name" "$COLOR_RESET" "$ip" \
+      "$(colorize_summary "$doh_status")" \
+      "$(colorize_summary "$dot_status")")")
+  done
+
+  rm -rf "$tmp_dir"
+
+  printf "\n%bEncrypted DNS (DoH/DoT) availability:%b\n\n" "$COLOR_WHITE" "$COLOR_RESET"
+
+  {
+    printf "\033[1m%b%s\t%s\t%s\t%s%b\033[0m\n" \
+      "$COLOR_WHITE" "Resolver" "IP" "DoH" "DoT" "$COLOR_RESET"
+    printf "%s\n" "${table_rows[@]}"
+  } | column -t -s $'\t'
+}
+
+get_reference_resolver() {
+  if [[ ${#AVAILABLE_DOH[@]} -gt 0 ]]; then
+    printf "%s\thttps" "${AVAILABLE_DOH[0]}"
+  elif [[ ${#AVAILABLE_DOT[@]} -gt 0 ]]; then
+    printf "%s\ttls" "${AVAILABLE_DOT[0]}"
+  fi
+}
+
 check_dns_hijacking() {
   local test_domains=("rutracker.org" "linkedin.com" "flibusta.is")
   local regular_dns_ips=()
-  local doh_ips=()
+  local encrypted_ips=()
   local hijacked_domain=""
   local hijacked_ip=""
 
+  local reference reference_entry reference_transport reference_name reference_ip
+  reference=$(get_reference_resolver)
+
+  if [[ -z "$reference" ]]; then
+    printf "\n%b%s%b\n" \
+      "$COLOR_ORANGE" \
+      "Cannot verify DNS spoofing: no DoH/DoT server reachable, skipping check" \
+      "$COLOR_RESET"
+    return 0
+  fi
+
+  reference_entry="${reference%%$'\t'*}"
+  reference_transport="${reference##*$'\t'}"
+  reference_name="${reference_entry%%|*}"
+  reference_ip="${reference_entry##*|}"
+
   for test_domain in "${test_domains[@]}"; do
     regular_dns_ips=()
-    doh_ips=()
+    encrypted_ips=()
 
     for dns_server in "${DNS_SERVERS[@]}"; do
       mapfile -t regular_dns_ips < <(get_domain_ips_via_dns "$test_domain" "$dns_server")
       [[ ${#regular_dns_ips[@]} -gt 0 ]] && break
     done
 
-    for doh_server in "${DOH_SERVERS[@]}"; do
-      mapfile -t doh_ips < <(get_domain_ips_via_doh "$test_domain" "$doh_server")
-      [[ ${#doh_ips[@]} -gt 0 ]] && break
-    done
+    mapfile -t encrypted_ips < <(resolve_via_dig "$test_domain" "$reference_ip" "$reference_transport")
 
-    [[ ${#regular_dns_ips[@]} -eq 0 ]] || [[ ${#doh_ips[@]} -eq 0 ]] && continue
+    [[ ${#regular_dns_ips[@]} -eq 0 ]] || [[ ${#encrypted_ips[@]} -eq 0 ]] && continue
 
-    if ! have_ip_intersection regular_dns_ips doh_ips; then
+    if ! have_ip_intersection regular_dns_ips encrypted_ips; then
       hijacked_domain="$test_domain"
       hijacked_ip="${regular_dns_ips[0]}"
       break
@@ -723,17 +813,21 @@ check_dns_hijacking() {
   done
 
   if [[ -n "$hijacked_domain" ]]; then
-    printf "\n%b%s%b %s %b%s%b %s %b%s%b\n\n" \
+    printf "\n%b%s%b %s %b%s%b %s %b%s%b\n" \
       "$COLOR_RED" "DNS hijacking detected!" "$COLOR_RESET" \
       "ISP redirects" "$COLOR_WHITE" "$hijacked_domain" "$COLOR_RESET" "to" \
       "$COLOR_RED" "$hijacked_ip" "$COLOR_RESET"
+
+    printf "%bReference resolver: %s (%s) over %s%b\n\n" \
+      "$COLOR_WHITE" "$reference_name" "$reference_ip" "${reference_transport^^}" "$COLOR_RESET"
 
     printf "%b%s%b\n%b%s%b\n" \
       "$COLOR_ORANGE" "DNS hijacking may affect the accuracy of this check" "$COLOR_RESET" \
       "$COLOR_ORANGE" "Configure encrypted DNS (DoH/DoT) on your system" "$COLOR_RESET"
   else
-    printf "\n%b%s%b\n" \
-      "$COLOR_GREEN" "Good news, no DNS hijacking detected!" "$COLOR_RESET"
+    printf "\n%b%s%b %b(reference: %s over %s)%b\n" \
+      "$COLOR_GREEN" "Good news, no DNS hijacking detected!" "$COLOR_RESET" \
+      "$COLOR_WHITE" "$reference_name" "${reference_transport^^}" "$COLOR_RESET"
   fi
 }
 
