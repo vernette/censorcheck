@@ -589,7 +589,7 @@ get_single_check_result() {
 
   if [[ -z "$PROXY" ]]; then
     local ip
-    ip=$(get_domain_ip "$domain")
+    ip=$(get_domain_ip "$domain" "$ip_version")
 
     if [[ -n "$ip" ]] && ! is_port_open "$ip" "$port"; then
       jq -n '{"status": -1, "redirect_url": null}'
@@ -654,13 +654,15 @@ gather_single_domain_result() {
 }
 
 get_record_type() {
-  [[ "$IP_VERSION" == "6" ]] && echo "AAAA" || echo "A"
+  local ip_version=${1:-$IP_VERSION}
+  [[ "$ip_version" == "6" ]] && echo "AAAA" || echo "A"
 }
 
 get_domain_ip() {
   local domain=$1
+  local ip_version=${2:-$IP_VERSION}
 
-  nslookup -type="$(get_record_type)" "$domain" |
+  nslookup -type="$(get_record_type "$ip_version")" "$domain" |
     awk '/^Address: / && !/#/ {print $2; exit}' || true
 }
 
@@ -841,7 +843,7 @@ check_dns_hijacking() {
 is_port_open() {
   local ip="$1"
   local port="$2"
-  timeout 1 bash -c "(echo >/dev/tcp/$ip/$port)" 2>/dev/null
+  timeout "$TIMEOUT" bash -c "(echo >/dev/tcp/$ip/$port)" 2>/dev/null
 }
 
 is_ip_reachable() {
