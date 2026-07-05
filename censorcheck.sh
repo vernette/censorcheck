@@ -495,7 +495,7 @@ execute_curl() {
     --retry-all-errors
     --retry "$RETRIES"
     --connect-timeout "$TIMEOUT"
-    --max-time "$TIMEOUT"
+    --max-time "$((TIMEOUT * (RETRIES + 1)))"
     -"$ip_version_to_use"
     -A "$USER_AGENT"
     -H "Sec-Fetch-Site: none"
