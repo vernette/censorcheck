@@ -17,6 +17,8 @@ A bash script for checking the accessibility of websites potentially affected by
 
 - Tests both HTTP and HTTPS protocols for each domain
 - Detects different access scenarios: available, blocked, redirected, or access denied
+- Checks encrypted DNS (DoH/DoT) availability for popular resolvers
+- Detects DNS hijacking by comparing regular DNS answers with an encrypted resolver
 - Includes predefined lists of commonly DPI-blocked and geo-restricted websites
 - Supports custom domain lists via file input
 - Configurable connection timeout and retry parameters
@@ -33,8 +35,9 @@ The script contains predefined lists of websites commonly affected by:
 
 - bash
 - curl
-- nslookup
-- netcat
+- dig
+- jq
+- column
 
 ## Usage
 
