@@ -105,13 +105,13 @@ show_progress() {
       "$COLOR_RESET" \
       "$COLOR_WHITE" \
       "$domain" \
-      "$COLOR_RESET"
+      "$COLOR_RESET" >&2
   fi
 }
 
 clear_progress() {
   if ! $JSON_OUTPUT; then
-    printf "\r%80s\r" " "
+    printf "\r%80s\r" " " >&2
   fi
 }
 
