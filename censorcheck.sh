@@ -297,6 +297,11 @@ install_dependencies() {
     return 0
   fi
 
+  if $JSON_OUTPUT; then
+    echo "Missing dependencies: ${missing_packages[*]}" >&2
+    exit 1
+  fi
+
   prompt_for_installation "${missing_packages[@]}"
 
   pkg_manager=$(get_package_manager)
@@ -1137,13 +1142,13 @@ run_checks_and_print() {
 main() {
   set -euo pipefail
 
-  trap cleanup EXIT INT TERM
+  trap cleanup INT TERM
 
-  install_dependencies
   parse_arguments "$@"
+  install_dependencies
   run_checks_and_print
 
-  trap - EXIT INT TERM
+  trap - INT TERM
 }
 
 main "$@"
