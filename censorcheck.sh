@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 readonly SCRIPT_NAME=$(basename "$0")
-readonly DEPENDENCIES=("curl" "nslookup" "dig" "jq" "column")
+readonly DEPENDENCIES=("curl" "dig" "jq" "column")
 
 readonly COLOR_WHITE="\033[97m"
 readonly COLOR_RED="\033[31m"
@@ -225,21 +225,21 @@ install_with_package_manager() {
     case "$pkg_manager" in
       apt | termux)
         case "$dep" in
-          nslookup | dig) packages+=("dnsutils") ;;
+          dig) packages+=("dnsutils") ;;
           column) packages+=("bsdextrautils") ;;
           *) packages+=("$dep") ;;
         esac
         ;;
       pacman)
         case "$dep" in
-          nslookup | dig) packages+=("bind") ;;
+          dig) packages+=("bind") ;;
           column) packages+=("util-linux") ;;
           *) packages+=("$dep") ;;
         esac
         ;;
       dnf | yum)
         case "$dep" in
-          nslookup | dig) packages+=("bind-utils") ;;
+          dig) packages+=("bind-utils") ;;
           column) packages+=("util-linux") ;;
           *) packages+=("$dep") ;;
         esac
@@ -608,22 +608,17 @@ get_domain_ip() {
   local domain=$1
   local ip_version=${2:-$IP_VERSION}
 
-  nslookup -type="$(get_record_type "$ip_version")" "$domain" |
-    awk '/^Address: / && !/#/ {print $2; exit}' || true
+  dig +short "$domain" "$(get_record_type "$ip_version")" 2>/dev/null |
+    awk '/^[0-9a-fA-F.:]+$/ {print; exit}' || true
 }
 
 get_domain_ips_via_dns() {
   local domain=$1
   local server=$2
-  local output
 
-  if [[ -n "$server" ]]; then
-    output=$(nslookup -type="$(get_record_type)" "$domain" "$server" 2>/dev/null)
-  else
-    output=$(nslookup -type="$(get_record_type)" "$domain" 2>/dev/null)
-  fi
-
-  awk '/Address:/ && !/#/ {print $2}' <<<"$output" || true
+  dig +short @"$server" "$domain" "$(get_record_type)" \
+    +timeout="$TIMEOUT" +tries=1 2>/dev/null |
+    awk '/^[0-9a-fA-F.:]+$/' || true
 }
 
 resolve_via_dig() {
