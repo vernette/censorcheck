@@ -587,12 +587,14 @@ get_single_check_result() {
   local port
   [[ "${protocol,,}" == "https" ]] && port=443 || port=80
 
-  local ip
-  ip=$(get_domain_ip "$domain")
+  if [[ -z "$PROXY" ]]; then
+    local ip
+    ip=$(get_domain_ip "$domain")
 
-  if [[ -n "$ip" ]] && ! is_port_open "$ip" "$port"; then
-    jq -n '{"status": -1, "redirect_url": null}'
-    return
+    if [[ -n "$ip" ]] && ! is_port_open "$ip" "$port"; then
+      jq -n '{"status": -1, "redirect_url": null}'
+      return
+    fi
   fi
 
   response=$(execute_curl "$domain" "$protocol" "$follow_redirects" "$ip_version")
@@ -1069,7 +1071,7 @@ run_checks_and_print() {
       continue
     fi
 
-    if ! is_ip_reachable "$ip_address"; then
+    if [[ -z "$PROXY" ]] && ! is_ip_reachable "$ip_address"; then
       if $JSON_OUTPUT; then
         all_results_json=$(echo "$all_results_json" | jq --argjson item "$(make_json_error "$domain" blocked_by_ip)" '. + [$item]')
       else
