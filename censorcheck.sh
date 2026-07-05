@@ -612,6 +612,16 @@ get_domain_ip() {
     awk '/^[0-9a-fA-F.:]+$/ {print; exit}' || true
 }
 
+domain_exists() {
+  local domain=$1
+  local rcode
+
+  rcode=$(dig +noall +comments "$domain" A 2>/dev/null |
+    awk -F'status: ' '/status:/ {split($2, parts, ","); print parts[1]; exit}')
+
+  [[ "$rcode" != "NXDOMAIN" ]]
+}
+
 get_domain_ips_via_dns() {
   local domain=$1
   local server=$2
@@ -795,42 +805,21 @@ is_ip_reachable() {
 make_json_error() {
   local domain="$1"
   local error_code="$2"
+  local error_message="$3"
 
-  case "$error_code" in
-    nxdomain)
-      jq -n --arg service "$domain" '
-        {
-          "service": $service,
-          "error": "Domain does not exist",
-          "error_code": "nxdomain",
-          "http": null,
-          "https": null
-        }
-      '
-      ;;
-    blocked_by_ip)
-      jq -n --arg service "$domain" '
-        {
-          "service": $service,
-          "error": "Blocked by IP",
-          "error_code": "blocked_by_ip",
-          "http": null,
-          "https": null
-        }
-      '
-      ;;
-    *)
-      jq -n --arg service "$domain" --arg code "$error_code" '
-        {
-          "service": $service,
-          "error": "Unknown error",
-          "error_code": $code,
-          "http": null,
-          "https": null
-        }
-      '
-      ;;
-  esac
+  jq -n \
+    --arg service "$domain" \
+    --arg code "$error_code" \
+    --arg error "$error_message" \
+    '
+    {
+      "service": $service,
+      "error": $error,
+      "error_code": $code,
+      "http": null,
+      "https": null
+    }
+    '
 }
 
 summarize_status_description() {
@@ -1002,18 +991,27 @@ run_checks_and_print() {
     ip_address=$(get_domain_ip "$domain")
 
     if [[ -z "$ip_address" ]]; then
+      local error_code error_message
+
+      if domain_exists "$domain"; then
+        error_code="no_dns_record"
+        error_message="No $(get_record_type) record"
+      else
+        error_code="nxdomain"
+        error_message="Domain does not exist"
+      fi
 
       if $JSON_OUTPUT; then
-        all_results_json=$(echo "$all_results_json" | jq --argjson item "$(make_json_error "$domain" nxdomain)" '. + [$item]')
+        all_results_json=$(echo "$all_results_json" | jq --argjson item "$(make_json_error "$domain" "$error_code" "$error_message")" '. + [$item]')
       else
-        add_text_result_row "$domain" "N/A" "Domain does not exist" "Domain does not exist"
+        add_text_result_row "$domain" "N/A" "$error_message" "$error_message"
       fi
       continue
     fi
 
     if [[ -z "$PROXY" ]] && ! is_ip_reachable "$ip_address"; then
       if $JSON_OUTPUT; then
-        all_results_json=$(echo "$all_results_json" | jq --argjson item "$(make_json_error "$domain" blocked_by_ip)" '. + [$item]')
+        all_results_json=$(echo "$all_results_json" | jq --argjson item "$(make_json_error "$domain" blocked_by_ip "$MSG_BLOCKED_BY_IP")" '. + [$item]')
       else
         add_text_result_row "$domain" "$ip_address" "$MSG_BLOCKED_BY_IP" "$MSG_BLOCKED_BY_IP"
       fi
