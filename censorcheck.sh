@@ -77,13 +77,6 @@ readonly MSG_OTHER="Responded with status code"
 
 declare -a TEXT_RESULTS=()
 
-declare -A DEPENDENCY_COMMANDS=(
-  [curl]="curl"
-  [nslookup]="nslookup"
-  [dig]="dig"
-  [column]="column"
-)
-
 error_exit() {
   local message="$1"
   local exit_code="${2:-1}"
@@ -164,11 +157,9 @@ is_installed() {
 
 check_missing_dependencies() {
   local missing_pkgs=()
-  local cmd
 
   for pkg in "${DEPENDENCIES[@]}"; do
-    cmd="${DEPENDENCY_COMMANDS[$pkg]:-$pkg}"
-    if ! is_installed "$cmd"; then
+    if ! is_installed "$pkg"; then
       missing_pkgs+=("$pkg")
     fi
   done
@@ -515,51 +506,6 @@ execute_curl() {
   else
     echo "000${CURL_SEPARATOR}"
   fi
-}
-
-format_result() {
-  local protocol=$1
-  local status_code=$2
-  local redirect_url=$3
-  local msg
-
-  if [ -z "$status_code" ] || [ "$status_code" = "000" ] || [ "$status_code" -eq 0 ]; then
-    msg=$(printf "$MSG_BLOCKED_TEMPLATE" "$TIMEOUT")
-  elif [ "$status_code" -ge 300 ] && [ "$status_code" -lt 400 ]; then
-    if [[ -z "$redirect_url" ]]; then
-      redirect_url="<empty>"
-    fi
-    msg=$(printf "$MSG_REDIRECT (%s) to %b%s%b" "$status_code" "$COLOR_WHITE" "$redirect_url" "$COLOR_RESET")
-  elif [ "$status_code" -eq 200 ]; then
-    msg="$MSG_AVAILABLE ($status_code)"
-  elif [ "$status_code" -eq 403 ]; then
-    msg="$MSG_ACCESS_DENIED ($status_code)"
-  else
-    msg="$MSG_OTHER $status_code"
-  fi
-
-  first_word="${msg%% *}"
-  rest="${msg#* }"
-
-  case "$first_word" in
-    Blocked)
-      first_word_color=$COLOR_RED
-      ;;
-    Available)
-      first_word_color=$COLOR_GREEN
-      ;;
-    Redirected)
-      first_word_color=$COLOR_BLUE
-      ;;
-    Denied)
-      first_word_color=$COLOR_RED
-      ;;
-    *)
-      first_word_color=$COLOR_ORANGE
-      ;;
-  esac
-
-  printf "  %b%s%b: %b%s%b %s\n" "$COLOR_WHITE" "$protocol" "$COLOR_RESET" "$first_word_color" "$first_word" "$COLOR_RESET" "$rest"
 }
 
 get_domains_to_check() {
@@ -938,9 +884,6 @@ colorize_summary() {
       ;;
     Denied)
       first_word_color=$COLOR_RED
-      ;;
-    N/A | Skipped)
-      first_word_color=$COLOR_ORANGE
       ;;
     *)
       first_word_color=$COLOR_ORANGE
