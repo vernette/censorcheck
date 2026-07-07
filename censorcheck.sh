@@ -126,7 +126,7 @@ Checks accessibility of websites that might be blocked by DPI or geolocation res
 
 Options:
   -h, --help         Display this help message and exit
-  -m, --mode         Set checking mode: 'dpi', 'geoblock', 'dns', or 'both' (default: $MODE)
+  -m, --mode         Set checking mode: 'dpi', 'geoblock', 'both' (dpi + geoblock), or 'dns' only (default: $MODE)
   -t, --timeout      Set connection timeout in seconds (default: $TIMEOUT)
   -r, --retries      Set number of connection retries (default: $RETRIES)
   -u, --user-agent   Set custom User-Agent string (default: $USER_AGENT)
