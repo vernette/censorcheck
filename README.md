@@ -82,6 +82,9 @@ bash <(wget -qO- https://censorcheck.mirror.vrnt.xyz) --mode dpi
 # Check DPI-blocked sites using IPv6
 ./censorcheck.sh --mode dpi --ipv6
 
+# Run only DNS checks (DoH/DoT availability and hijacking detection)
+./censorcheck.sh --mode dns
+
 # Check custom domain list with increased timeout and retries
 ./censorcheck.sh --file sites.txt --timeout 10 --retries 3
 
@@ -112,7 +115,7 @@ Checks accessibility of websites that might be blocked by DPI or geolocation res
 
 Options:
   -h, --help         Display this help message and exit
-  -m, --mode         Set checking mode: 'dpi', 'geoblock', or 'both' (default: both)
+  -m, --mode         Set checking mode: 'dpi', 'geoblock', 'dns', or 'both' (default: both)
   -t, --timeout      Set connection timeout in seconds (default: 5)
   -r, --retries      Set number of connection retries (default: 2)
   -u, --user-agent   Set custom User-Agent string (default: Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:129.0) Gecko/20100101 Firefox/129.0)
