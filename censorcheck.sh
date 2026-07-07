@@ -126,7 +126,7 @@ Checks accessibility of websites that might be blocked by DPI or geolocation res
 
 Options:
   -h, --help         Display this help message and exit
-  -m, --mode         Set checking mode: 'dpi', 'geoblock', or 'both' (default: $MODE)
+  -m, --mode         Set checking mode: 'dpi', 'geoblock', 'dns', or 'both' (default: $MODE)
   -t, --timeout      Set connection timeout in seconds (default: $TIMEOUT)
   -r, --retries      Set number of connection retries (default: $RETRIES)
   -u, --user-agent   Set custom User-Agent string (default: $USER_AGENT)
@@ -319,10 +319,10 @@ parse_arguments() {
         exit 0
         ;;
       -m | --mode)
-        if [[ $2 == "dpi" || $2 == "geoblock" || $2 == "both" ]]; then
+        if [[ $2 == "dpi" || $2 == "geoblock" || $2 == "dns" || $2 == "both" ]]; then
           MODE=$2
         else
-          error_exit "Invalid mode: $2. Valid modes are: dpi, geoblock, both"
+          error_exit "Invalid mode: $2. Valid modes are: dpi, geoblock, dns, both"
         fi
         shift 2
         ;;
@@ -409,7 +409,6 @@ print_header() {
   local mode
 
   printf "\nTimeout set to: %b%ss%b\n" "$COLOR_WHITE" "$TIMEOUT" "$COLOR_RESET"
-  printf "Retries set to: %b%s%b\n" "$COLOR_WHITE" "$RETRIES" "$COLOR_RESET"
 
   case $MODE in
     dpi)
@@ -417,6 +416,9 @@ print_header() {
       ;;
     geoblock)
       mode="Geoblock"
+      ;;
+    dns)
+      mode="DNS"
       ;;
     both)
       mode="DPI and Geoblock"
@@ -427,6 +429,13 @@ print_header() {
     printf "Mode set to: %b%s%b\n" "$COLOR_WHITE" "$mode" "$COLOR_RESET"
   fi
 
+  if [[ "$MODE" == "dns" ]]; then
+    check_encrypted_dns_servers
+    check_dns_hijacking
+    return
+  fi
+
+  printf "Retries set to: %b%s%b\n" "$COLOR_WHITE" "$RETRIES" "$COLOR_RESET"
   printf "User-Agent set to: %b%s%b\n" "$COLOR_WHITE" "$USER_AGENT" "$COLOR_RESET"
 
   if [[ -n "$DOMAINS_FILE" ]]; then
@@ -972,6 +981,14 @@ print_table_results() {
 run_checks_and_print() {
   local domains
   local all_results_json="[]"
+
+  if [[ "$MODE" == "dns" ]]; then
+    if $JSON_OUTPUT; then
+      error_exit "JSON output is not supported for dns mode"
+    fi
+    print_header
+    return
+  fi
 
   read -r -a domains <<<"$(get_domains_to_check)"
 
