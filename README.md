@@ -128,6 +128,7 @@ Options:
   --http-only        Check only HTTP protocol
   --https-only       Check only HTTPS protocol
   --no-dns           Skip DNS checks (DoH/DoT availability and hijacking detection)
+  --no-header        Do not print the script header with current settings
   -j, --json         Output results in JSON format
 
 Examples:
@@ -140,6 +141,7 @@ Examples:
   censorcheck.sh --proxy 127.0.0.1:1080        # Check domains using SOCKS5 proxy
   censorcheck.sh --domain example.com          # Check a single domain
   censorcheck.sh --no-dns                      # Skip DNS checks
+  censorcheck.sh --no-header                   # Do not print the script header
   censorcheck.sh --file my-domains.txt --json  # Check custom domains and output JSON
 
 The domain file should contain one domain per line. Lines starting with # are ignored
