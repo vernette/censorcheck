@@ -37,6 +37,7 @@ PROXY=""
 SINGLE_DOMAIN=""
 PROTOCOL="both"
 JSON_OUTPUT=false
+DNS_CHECK=true
 
 readonly DPI_BLOCKED_SITES=(
   "youtube.com"
@@ -136,6 +137,7 @@ Options:
   -d, --domain       Specify a single domain to check
   --http-only        Test only HTTP
   --https-only       Test only HTTPS
+  --no-dns           Skip DNS checks (DoH/DoT availability and hijacking detection)
   -j, --json         Output results in JSON format
 
 Examples:
@@ -149,6 +151,7 @@ Examples:
   $SCRIPT_NAME --domain example.com          # Check a single domain
   $SCRIPT_NAME --http-only                   # Test only HTTP
   $SCRIPT_NAME --https-only                  # Test only HTTPS
+  $SCRIPT_NAME --no-dns                      # Skip DNS checks
 
 The domain file should contain one domain per line. Lines starting with # are ignored
 EOF
@@ -394,6 +397,10 @@ parse_arguments() {
         PROTOCOL="https"
         shift
         ;;
+      --no-dns)
+        DNS_CHECK=false
+        shift
+        ;;
       -j | --json)
         JSON_OUTPUT=true
         shift
@@ -403,6 +410,10 @@ parse_arguments() {
         ;;
     esac
   done
+
+  if [[ "$MODE" == "dns" ]] && ! $DNS_CHECK; then
+    error_exit "--no-dns cannot be used with --mode dns"
+  fi
 }
 
 print_header() {
@@ -464,8 +475,10 @@ print_header() {
       ;;
   esac
 
-  check_encrypted_dns_servers
-  check_dns_hijacking
+  if $DNS_CHECK; then
+    check_encrypted_dns_servers
+    check_dns_hijacking
+  fi
 }
 
 read_domains_from_file() {
