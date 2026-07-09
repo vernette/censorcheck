@@ -86,7 +86,6 @@ error_exit() {
   local message="$1"
   local exit_code="${2:-1}"
   printf "[%b%s%b] %b%s%b\n" "$COLOR_RED" "ERROR" "$COLOR_RESET" "$COLOR_WHITE" "$message" "$COLOR_RESET" >&2
-  display_help
   exit "$exit_code"
 }
 
