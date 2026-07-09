@@ -1030,7 +1030,9 @@ run_checks_and_print() {
 
   if ! $JSON_OUTPUT; then
     print_header
-    printf "\n"
+    if $SHOW_HEADER || $DNS_CHECK; then
+      printf "\n"
+    fi
   fi
 
   for domain in "${domains[@]}"; do
