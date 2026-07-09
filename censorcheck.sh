@@ -41,6 +41,7 @@ DNS_CHECK=true
 
 readonly DPI_BLOCKED_SITES=(
   "youtube.com"
+  "redirector.googlevideo.com/report_mapping?di=no"
   "discord.com"
   "instagram.com"
   "facebook.com"
@@ -604,7 +605,7 @@ gather_single_domain_result() {
   fi
 
   jq -n \
-    --arg service "$domain" \
+    --arg service "$(get_domain_host "$domain")" \
     --argjson http_ipv4 "$http_ipv4" \
     --argjson http_ipv6 "$http_ipv6" \
     --argjson https_ipv4 "$https_ipv4" \
@@ -624,13 +625,18 @@ gather_single_domain_result() {
         '
 }
 
+get_domain_host() {
+  printf "%s" "${1%%/*}"
+}
+
 get_record_type() {
   local ip_version=${1:-$IP_VERSION}
   [[ "$ip_version" == "6" ]] && echo "AAAA" || echo "A"
 }
 
 get_domain_ip() {
-  local domain=$1
+  local domain
+  domain=$(get_domain_host "$1")
   local ip_version=${2:-$IP_VERSION}
 
   dig +short "$domain" "$(get_record_type "$ip_version")" 2>/dev/null |
@@ -638,7 +644,8 @@ get_domain_ip() {
 }
 
 domain_exists() {
-  local domain=$1
+  local domain
+  domain=$(get_domain_host "$1")
   local rcode
 
   rcode=$(dig +noall +comments "$domain" A 2>/dev/null |
@@ -1019,8 +1026,9 @@ run_checks_and_print() {
     ((++current_index))
     show_progress "$current_index" "$total_domains" "$domain"
 
-    local ip_address
+    local host ip_address
 
+    host=$(get_domain_host "$domain")
     ip_address=$(get_domain_ip "$domain")
 
     if [[ -z "$ip_address" ]]; then
@@ -1035,18 +1043,18 @@ run_checks_and_print() {
       fi
 
       if $JSON_OUTPUT; then
-        all_results_json=$(echo "$all_results_json" | jq --argjson item "$(make_json_error "$domain" "$error_code" "$error_message")" '. + [$item]')
+        all_results_json=$(echo "$all_results_json" | jq --argjson item "$(make_json_error "$host" "$error_code" "$error_message")" '. + [$item]')
       else
-        add_text_result_row "$domain" "N/A" "$error_message" "$error_message"
+        add_text_result_row "$host" "N/A" "$error_message" "$error_message"
       fi
       continue
     fi
 
     if [[ -z "$PROXY" ]] && ! is_ip_reachable "$ip_address"; then
       if $JSON_OUTPUT; then
-        all_results_json=$(echo "$all_results_json" | jq --argjson item "$(make_json_error "$domain" blocked_by_ip "$MSG_BLOCKED_BY_IP")" '. + [$item]')
+        all_results_json=$(echo "$all_results_json" | jq --argjson item "$(make_json_error "$host" blocked_by_ip "$MSG_BLOCKED_BY_IP")" '. + [$item]')
       else
-        add_text_result_row "$domain" "$ip_address" "$MSG_BLOCKED_BY_IP" "$MSG_BLOCKED_BY_IP"
+        add_text_result_row "$host" "$ip_address" "$MSG_BLOCKED_BY_IP" "$MSG_BLOCKED_BY_IP"
       fi
       continue
     fi
