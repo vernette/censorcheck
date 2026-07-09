@@ -100,12 +100,6 @@ bash <(wget -qO- https://censorcheck.mirror.vrnt.xyz) --mode dpi
 ./censorcheck.sh --mode dpi --https-only
 ```
 
-You could run the script directly from GitHub:
-
-```bash
-bash <(wget -qO- https://github.com/vernette/censorcheck/raw/master/censorcheck.sh) --mode dpi
-```
-
 All options available in the help message (`-h, --help`) can be used and combined.
 
 ## Options
