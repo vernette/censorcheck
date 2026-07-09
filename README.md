@@ -155,6 +155,8 @@ example.com
 test-site.net
 # Commented lines are ignored
 another-domain.org
+# Domains with a path/query are also supported
+redirector.googlevideo.com/report_mapping?di=no
 
 # Empty lines are also ignored
 ```
@@ -164,6 +166,8 @@ Then run the script with:
 ```bash
 ./censorcheck.sh --file my-domains.txt
 ```
+
+Entries may include a path and query string (also works with `-d, --domain`) - the full URL is requested, but the results table shows only the host.
 
 ## Test results
 
