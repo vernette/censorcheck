@@ -426,70 +426,64 @@ parse_arguments() {
 print_header() {
   local mode
 
-  if $SHOW_HEADER; then
-    printf "\nTimeout set to: %b%ss%b\n" "$COLOR_WHITE" "$TIMEOUT" "$COLOR_RESET"
+  printf "\nTimeout set to: %b%ss%b\n" "$COLOR_WHITE" "$TIMEOUT" "$COLOR_RESET"
 
-    case $MODE in
-      dpi)
-        mode="DPI"
-        ;;
-      geoblock)
-        mode="Geoblock"
-        ;;
-      dns)
-        mode="DNS"
-        ;;
-      both)
-        mode="DPI and Geoblock"
-        ;;
-    esac
+  case $MODE in
+    dpi)
+      mode="DPI"
+      ;;
+    geoblock)
+      mode="Geoblock"
+      ;;
+    dns)
+      mode="DNS"
+      ;;
+    both)
+      mode="DPI and Geoblock"
+      ;;
+  esac
 
-    if [[ -z "$DOMAINS_FILE" ]] && [[ -z "$SINGLE_DOMAIN" ]]; then
-      printf "Mode set to: %b%s%b\n" "$COLOR_WHITE" "$mode" "$COLOR_RESET"
-    fi
+  if [[ -z "$DOMAINS_FILE" ]] && [[ -z "$SINGLE_DOMAIN" ]]; then
+    printf "Mode set to: %b%s%b\n" "$COLOR_WHITE" "$mode" "$COLOR_RESET"
   fi
 
   if [[ "$MODE" == "dns" ]]; then
-    check_encrypted_dns_servers
-    check_dns_hijacking
     return
   fi
 
-  if $SHOW_HEADER; then
-    printf "Retries set to: %b%s%b\n" "$COLOR_WHITE" "$RETRIES" "$COLOR_RESET"
-    printf "User-Agent set to: %b%s%b\n" "$COLOR_WHITE" "$USER_AGENT" "$COLOR_RESET"
+  printf "Retries set to: %b%s%b\n" "$COLOR_WHITE" "$RETRIES" "$COLOR_RESET"
+  printf "User-Agent set to: %b%s%b\n" "$COLOR_WHITE" "$USER_AGENT" "$COLOR_RESET"
 
-    if [[ -n "$DOMAINS_FILE" ]]; then
-      printf "Domain mode set to: %buser domains from %s%b\n" "$COLOR_WHITE" "$DOMAINS_FILE" "$COLOR_RESET"
-    elif [[ -n "$SINGLE_DOMAIN" ]]; then
-      printf "Checking single domain: %b%s%b\n" "$COLOR_WHITE" "$SINGLE_DOMAIN" "$COLOR_RESET"
-    else
-      printf "Domain mode set to: %bpredefined domains%b\n" "$COLOR_WHITE" "$COLOR_RESET"
-    fi
-
-    printf "IP version set to: %bIPv%s%b\n" "$COLOR_WHITE" "$IP_VERSION" "$COLOR_RESET"
-
-    if [ -n "$PROXY" ]; then
-      printf "SOCKS5 proxy set to: %b%s%b\n" "$COLOR_WHITE" "$PROXY" "$COLOR_RESET"
-    fi
-
-    case $PROTOCOL in
-      http)
-        printf "Protocol set to: %bHTTP only%b\n" "$COLOR_WHITE" "$COLOR_RESET"
-        ;;
-      https)
-        printf "Protocol set to: %bHTTPS only%b\n" "$COLOR_WHITE" "$COLOR_RESET"
-        ;;
-      both)
-        printf "Protocol set to: %bHTTP and HTTPS%b\n" "$COLOR_WHITE" "$COLOR_RESET"
-        ;;
-    esac
+  if [[ -n "$DOMAINS_FILE" ]]; then
+    printf "Domain mode set to: %buser domains from %s%b\n" "$COLOR_WHITE" "$DOMAINS_FILE" "$COLOR_RESET"
+  elif [[ -n "$SINGLE_DOMAIN" ]]; then
+    printf "Checking single domain: %b%s%b\n" "$COLOR_WHITE" "$SINGLE_DOMAIN" "$COLOR_RESET"
+  else
+    printf "Domain mode set to: %bpredefined domains%b\n" "$COLOR_WHITE" "$COLOR_RESET"
   fi
 
-  if $DNS_CHECK; then
-    check_encrypted_dns_servers
-    check_dns_hijacking
+  printf "IP version set to: %bIPv%s%b\n" "$COLOR_WHITE" "$IP_VERSION" "$COLOR_RESET"
+
+  if [ -n "$PROXY" ]; then
+    printf "SOCKS5 proxy set to: %b%s%b\n" "$COLOR_WHITE" "$PROXY" "$COLOR_RESET"
   fi
+
+  case $PROTOCOL in
+    http)
+      printf "Protocol set to: %bHTTP only%b\n" "$COLOR_WHITE" "$COLOR_RESET"
+      ;;
+    https)
+      printf "Protocol set to: %bHTTPS only%b\n" "$COLOR_WHITE" "$COLOR_RESET"
+      ;;
+    both)
+      printf "Protocol set to: %bHTTP and HTTPS%b\n" "$COLOR_WHITE" "$COLOR_RESET"
+      ;;
+  esac
+}
+
+run_dns_checks() {
+  check_encrypted_dns_servers
+  check_dns_hijacking
 }
 
 read_domains_from_file() {
@@ -1016,7 +1010,12 @@ run_checks_and_print() {
     if $JSON_OUTPUT; then
       error_exit "JSON output is not supported for dns mode"
     fi
-    print_header
+
+    if $SHOW_HEADER; then
+      print_header
+    fi
+
+    run_dns_checks
     return
   fi
 
@@ -1029,7 +1028,12 @@ run_checks_and_print() {
   TEXT_RESULTS=()
 
   if ! $JSON_OUTPUT; then
-    print_header
+    if $SHOW_HEADER; then
+      print_header
+    fi
+    if $DNS_CHECK; then
+      run_dns_checks
+    fi
     if $SHOW_HEADER || $DNS_CHECK; then
       printf "\n"
     fi
