@@ -1146,6 +1146,10 @@ main() {
   install_dependencies
   run_checks_and_print
 
+  if ! $JSON_OUTPUT; then
+    printf "\n"
+  fi
+
   trap - INT TERM
 }
 
