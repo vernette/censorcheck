@@ -38,6 +38,7 @@ SINGLE_DOMAIN=""
 PROTOCOL="both"
 JSON_OUTPUT=false
 DNS_CHECK=true
+SHOW_HEADER=true
 
 readonly DPI_BLOCKED_SITES=(
   "youtube.com"
@@ -138,6 +139,7 @@ Options:
   --http-only        Test only HTTP
   --https-only       Test only HTTPS
   --no-dns           Skip DNS checks (DoH/DoT availability and hijacking detection)
+  --no-header        Do not print the script header with current settings
   -j, --json         Output results in JSON format
 
 Examples:
@@ -152,6 +154,7 @@ Examples:
   $SCRIPT_NAME --http-only                   # Test only HTTP
   $SCRIPT_NAME --https-only                  # Test only HTTPS
   $SCRIPT_NAME --no-dns                      # Skip DNS checks
+  $SCRIPT_NAME --no-header                   # Do not print the script header
 
 The domain file should contain one domain per line. Lines starting with # are ignored
 EOF
@@ -401,6 +404,10 @@ parse_arguments() {
         DNS_CHECK=false
         shift
         ;;
+      --no-header)
+        SHOW_HEADER=false
+        shift
+        ;;
       -j | --json)
         JSON_OUTPUT=true
         shift
@@ -419,25 +426,27 @@ parse_arguments() {
 print_header() {
   local mode
 
-  printf "\nTimeout set to: %b%ss%b\n" "$COLOR_WHITE" "$TIMEOUT" "$COLOR_RESET"
+  if $SHOW_HEADER; then
+    printf "\nTimeout set to: %b%ss%b\n" "$COLOR_WHITE" "$TIMEOUT" "$COLOR_RESET"
 
-  case $MODE in
-    dpi)
-      mode="DPI"
-      ;;
-    geoblock)
-      mode="Geoblock"
-      ;;
-    dns)
-      mode="DNS"
-      ;;
-    both)
-      mode="DPI and Geoblock"
-      ;;
-  esac
+    case $MODE in
+      dpi)
+        mode="DPI"
+        ;;
+      geoblock)
+        mode="Geoblock"
+        ;;
+      dns)
+        mode="DNS"
+        ;;
+      both)
+        mode="DPI and Geoblock"
+        ;;
+    esac
 
-  if [[ -z "$DOMAINS_FILE" ]] && [[ -z "$SINGLE_DOMAIN" ]]; then
-    printf "Mode set to: %b%s%b\n" "$COLOR_WHITE" "$mode" "$COLOR_RESET"
+    if [[ -z "$DOMAINS_FILE" ]] && [[ -z "$SINGLE_DOMAIN" ]]; then
+      printf "Mode set to: %b%s%b\n" "$COLOR_WHITE" "$mode" "$COLOR_RESET"
+    fi
   fi
 
   if [[ "$MODE" == "dns" ]]; then
@@ -446,34 +455,36 @@ print_header() {
     return
   fi
 
-  printf "Retries set to: %b%s%b\n" "$COLOR_WHITE" "$RETRIES" "$COLOR_RESET"
-  printf "User-Agent set to: %b%s%b\n" "$COLOR_WHITE" "$USER_AGENT" "$COLOR_RESET"
+  if $SHOW_HEADER; then
+    printf "Retries set to: %b%s%b\n" "$COLOR_WHITE" "$RETRIES" "$COLOR_RESET"
+    printf "User-Agent set to: %b%s%b\n" "$COLOR_WHITE" "$USER_AGENT" "$COLOR_RESET"
 
-  if [[ -n "$DOMAINS_FILE" ]]; then
-    printf "Domain mode set to: %buser domains from %s%b\n" "$COLOR_WHITE" "$DOMAINS_FILE" "$COLOR_RESET"
-  elif [[ -n "$SINGLE_DOMAIN" ]]; then
-    printf "Checking single domain: %b%s%b\n" "$COLOR_WHITE" "$SINGLE_DOMAIN" "$COLOR_RESET"
-  else
-    printf "Domain mode set to: %bpredefined domains%b\n" "$COLOR_WHITE" "$COLOR_RESET"
+    if [[ -n "$DOMAINS_FILE" ]]; then
+      printf "Domain mode set to: %buser domains from %s%b\n" "$COLOR_WHITE" "$DOMAINS_FILE" "$COLOR_RESET"
+    elif [[ -n "$SINGLE_DOMAIN" ]]; then
+      printf "Checking single domain: %b%s%b\n" "$COLOR_WHITE" "$SINGLE_DOMAIN" "$COLOR_RESET"
+    else
+      printf "Domain mode set to: %bpredefined domains%b\n" "$COLOR_WHITE" "$COLOR_RESET"
+    fi
+
+    printf "IP version set to: %bIPv%s%b\n" "$COLOR_WHITE" "$IP_VERSION" "$COLOR_RESET"
+
+    if [ -n "$PROXY" ]; then
+      printf "SOCKS5 proxy set to: %b%s%b\n" "$COLOR_WHITE" "$PROXY" "$COLOR_RESET"
+    fi
+
+    case $PROTOCOL in
+      http)
+        printf "Protocol set to: %bHTTP only%b\n" "$COLOR_WHITE" "$COLOR_RESET"
+        ;;
+      https)
+        printf "Protocol set to: %bHTTPS only%b\n" "$COLOR_WHITE" "$COLOR_RESET"
+        ;;
+      both)
+        printf "Protocol set to: %bHTTP and HTTPS%b\n" "$COLOR_WHITE" "$COLOR_RESET"
+        ;;
+    esac
   fi
-
-  printf "IP version set to: %bIPv%s%b\n" "$COLOR_WHITE" "$IP_VERSION" "$COLOR_RESET"
-
-  if [ -n "$PROXY" ]; then
-    printf "SOCKS5 proxy set to: %b%s%b\n" "$COLOR_WHITE" "$PROXY" "$COLOR_RESET"
-  fi
-
-  case $PROTOCOL in
-    http)
-      printf "Protocol set to: %bHTTP only%b\n" "$COLOR_WHITE" "$COLOR_RESET"
-      ;;
-    https)
-      printf "Protocol set to: %bHTTPS only%b\n" "$COLOR_WHITE" "$COLOR_RESET"
-      ;;
-    both)
-      printf "Protocol set to: %bHTTP and HTTPS%b\n" "$COLOR_WHITE" "$COLOR_RESET"
-      ;;
-  esac
 
   if $DNS_CHECK; then
     check_encrypted_dns_servers
