@@ -75,7 +75,7 @@ readonly GEO_BLOCKED_SITES=(
 
 readonly MSG_AVAILABLE="Available"
 readonly MSG_BLOCKED="Blocked"
-readonly MSG_BLOCKED_TEMPLATE="$MSG_BLOCKED or site didn't respond after %ss timeout"
+readonly MSG_TIMEOUT="$MSG_BLOCKED / Timeout"
 readonly MSG_BLOCKED_BY_IP="$MSG_BLOCKED by IP"
 readonly MSG_BLOCKED_BY_PORT="$MSG_BLOCKED by port"
 readonly MSG_REDIRECT="Redirected"
@@ -867,7 +867,7 @@ summarize_status_description() {
   if [[ "$status_code" -eq -1 ]]; then
     msg="$MSG_BLOCKED_BY_PORT"
   elif [[ -z "$status_code" || "$status_code" = "000" || "$status_code" -eq 0 ]]; then
-    msg=$(printf "$MSG_BLOCKED_TEMPLATE" "$TIMEOUT")
+    msg="$MSG_TIMEOUT"
   elif [[ "$status_code" -ge 300 && "$status_code" -lt 400 ]]; then
     [[ -z "$redirect_url" ]] && redirect_url="<empty>"
     msg=$(printf "%s (%s) -> %s" "$MSG_REDIRECT" "$status_code" "$redirect_url")
