@@ -525,7 +525,7 @@ execute_curl() {
   )
 
   if [ -n "$PROXY" ]; then
-    curl_opts+=(--proxy "socks5://$PROXY")
+    curl_opts+=(--proxy "socks5h://$PROXY")
   fi
 
   if [ "$follow_redirects" = true ]; then
