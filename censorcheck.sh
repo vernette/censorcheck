@@ -81,6 +81,9 @@ readonly MSG_BLOCKED_BY_PORT="$MSG_BLOCKED by port"
 readonly MSG_REDIRECT="Redirected"
 readonly MSG_ACCESS_DENIED="Denied"
 readonly MSG_OTHER="Responded with status code"
+readonly MSG_SPOOFED="Spoofed"
+readonly MSG_CLEAN="Clean"
+readonly MSG_NO_RESPONSE="Unreachable"
 
 declare -a TEXT_RESULTS=()
 
@@ -659,13 +662,20 @@ domain_exists() {
   [[ "$rcode" != "NXDOMAIN" ]]
 }
 
-get_domain_ips_via_dns() {
+resolve_via_plain_dns() {
   local domain=$1
   local server=$2
 
-  dig +short @"$server" "$domain" "$(get_record_type)" \
-    +timeout="$TIMEOUT" +tries=1 2>/dev/null |
-    awk '/^[0-9a-fA-F.:]+$/' || true
+  dig @"$server" "$domain" "$(get_record_type)" \
+    +timeout="$TIMEOUT" +tries=1 +noall +comments +answer 2>/dev/null |
+    awk '
+      /status:/ {
+        match($0, /status: [A-Z]+/)
+        rcode = substr($0, RSTART + 8, RLENGTH - 8)
+      }
+      $4 == "A" || $4 == "AAAA" { ips = ips " " $5 }
+      END { if (rcode) print rcode ips }
+    ' || true
 }
 
 resolve_via_dig() {
@@ -766,12 +776,34 @@ get_reference_resolver() {
   fi
 }
 
+classify_plain_answer() {
+  local answer=$1
+  local reference_ips_name=$2
+  local rcode
+  local plain_ips=()
+
+  read -r -a plain_ips <<<"$answer"
+  rcode="${plain_ips[0]:-}"
+  plain_ips=("${plain_ips[@]:1}")
+
+  if [[ "$rcode" == "NXDOMAIN" ]]; then
+    printf "%s (NXDOMAIN)" "$MSG_SPOOFED"
+  elif [[ ${#plain_ips[@]} -eq 0 ]]; then
+    printf "%s" "$MSG_NO_RESPONSE"
+  elif have_ip_intersection plain_ips "$reference_ips_name"; then
+    printf "%s" "$MSG_CLEAN"
+  else
+    printf "%s (%s)" "$MSG_SPOOFED" "${plain_ips[0]}"
+  fi
+}
+
 check_dns_hijacking() {
   local test_domains=("rutracker.org" "linkedin.com" "flibusta.is")
-  local regular_dns_ips=()
   local encrypted_ips=()
+  local table_rows=()
   local hijacked_domain=""
-  local hijacked_ip=""
+  local spoofed_count=0
+  local test_domain i tmp_dir status
 
   local reference reference_entry reference_transport reference_name reference_ip
   reference=$(get_reference_resolver)
@@ -790,42 +822,60 @@ check_dns_hijacking() {
   reference_ip="${reference_entry##*|}"
 
   for test_domain in "${test_domains[@]}"; do
-    regular_dns_ips=()
-    encrypted_ips=()
+    mapfile -t encrypted_ips < <(resolve_via_dig "$test_domain" "$reference_ip" "$reference_transport")
+    [[ ${#encrypted_ips[@]} -eq 0 ]] && continue
 
-    for dns_server in "${DNS_SERVERS[@]}"; do
-      mapfile -t regular_dns_ips < <(get_domain_ips_via_dns "$test_domain" "$dns_server")
-      [[ ${#regular_dns_ips[@]} -gt 0 ]] && break
+    spoofed_count=0
+    table_rows=()
+    tmp_dir=$(mktemp -d)
+
+    for i in "${!DNS_SERVERS[@]}"; do
+      resolve_via_plain_dns "$test_domain" "${DNS_SERVERS[$i]}" >"$tmp_dir/$i" &
+    done
+    wait
+
+    for i in "${!DNS_SERVERS[@]}"; do
+      status=$(classify_plain_answer "$(<"$tmp_dir/$i")" encrypted_ips)
+
+      if [[ "$status" == "$MSG_SPOOFED"* ]]; then
+        spoofed_count=$((spoofed_count + 1))
+      fi
+
+      table_rows+=("$(printf "%s\t%s" "${DNS_SERVERS[$i]}" "$(colorize_summary "$status")")")
     done
 
-    mapfile -t encrypted_ips < <(resolve_via_dig "$test_domain" "$reference_ip" "$reference_transport")
+    rm -rf "$tmp_dir"
 
-    [[ ${#regular_dns_ips[@]} -eq 0 ]] || [[ ${#encrypted_ips[@]} -eq 0 ]] && continue
-
-    if ! have_ip_intersection regular_dns_ips encrypted_ips; then
+    if [[ $spoofed_count -gt 0 ]]; then
       hijacked_domain="$test_domain"
-      hijacked_ip="${regular_dns_ips[0]}"
       break
     fi
   done
 
-  if [[ -n "$hijacked_domain" ]]; then
-    printf "\n%b%s%b %s %b%s%b %s %b%s%b\n" \
-      "$COLOR_RED" "DNS hijacking detected!" "$COLOR_RESET" \
-      "ISP redirects" "$COLOR_WHITE" "$hijacked_domain" "$COLOR_RESET" "to" \
-      "$COLOR_RED" "$hijacked_ip" "$COLOR_RESET"
-
-    printf "%bReference resolver: %s (%s) over %s%b\n\n" \
-      "$COLOR_WHITE" "$reference_name" "$reference_ip" "${reference_transport^^}" "$COLOR_RESET"
-
-    printf "%b%s%b\n%b%s%b\n" \
-      "$COLOR_ORANGE" "DNS hijacking may affect the accuracy of this check" "$COLOR_RESET" \
-      "$COLOR_ORANGE" "Configure encrypted DNS (DoH/DoT) on your system" "$COLOR_RESET"
-  else
+  if [[ -z "$hijacked_domain" ]]; then
     printf "\n%b%s%b %b(reference: %s over %s)%b\n" \
       "$COLOR_GREEN" "Good news, no DNS hijacking detected!" "$COLOR_RESET" \
       "$COLOR_WHITE" "$reference_name" "${reference_transport^^}" "$COLOR_RESET"
+    return 0
   fi
+
+  printf "\n%b%s%b %s %b%s%b\n" \
+    "$COLOR_RED" "DNS hijacking detected!" "$COLOR_RESET" \
+    "$spoofed_count of ${#DNS_SERVERS[@]} plain DNS resolvers spoofed for" \
+    "$COLOR_WHITE" "$hijacked_domain" "$COLOR_RESET"
+
+  printf "%bReference: %s (%s) over %s -> %s%b\n\n" \
+    "$COLOR_WHITE" "$reference_name" "$reference_ip" "${reference_transport^^}" \
+    "$(printf "%s, " "${encrypted_ips[@]}" | sed 's/, $//')" "$COLOR_RESET"
+
+  {
+    printf "\033[1m%b%s\t%s%b\033[0m\n" "$COLOR_WHITE" "Resolver" "Result" "$COLOR_RESET"
+    printf "%s\n" "${table_rows[@]}"
+  } | column -t -s $'\t'
+
+  printf "\n%b%s%b\n%b%s%b\n" \
+    "$COLOR_ORANGE" "DNS hijacking may affect the accuracy of this check" "$COLOR_RESET" \
+    "$COLOR_ORANGE" "Configure encrypted DNS (DoH/DoT) on your system" "$COLOR_RESET"
 }
 
 is_port_open() {
@@ -905,6 +955,12 @@ colorize_summary() {
       ;;
     Denied)
       first_word_color=$COLOR_RED
+      ;;
+    Spoofed)
+      first_word_color=$COLOR_RED
+      ;;
+    Clean)
+      first_word_color=$COLOR_GREEN
       ;;
     *)
       first_word_color=$COLOR_ORANGE
