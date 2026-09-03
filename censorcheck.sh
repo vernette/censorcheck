@@ -69,6 +69,8 @@ readonly DPI_BLOCKED_SITES=(
   "rezka.ag"
   "api.telegram.org"
   "play.google.com"
+  "github.com"
+  "raw.githubusercontent.com"
 )
 
 readonly GEO_BLOCKED_SITES=(
