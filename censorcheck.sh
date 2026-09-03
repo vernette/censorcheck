@@ -141,7 +141,7 @@ Options:
   -d, --domain       Specify a single domain to check
   --http-only        Test only HTTP
   --https-only       Test only HTTPS
-  --no-dns           Skip DNS checks (DoH/DoT availability and hijacking detection)
+  --no-dns           Skip DNS checks (UDP/DoH/DoT availability and hijacking detection)
   --no-header        Do not print the script header with current settings
   -j, --json         Output results in JSON format
 
@@ -707,7 +707,18 @@ have_ip_intersection() {
 }
 
 probe_resolver_transport() {
-  if [[ -n "$(resolve_via_dig "$1" "$2" "$3")" ]]; then
+  local domain=$1
+  local server_ip=$2
+  local transport=$3
+  local answer
+
+  if [[ "$transport" == "udp" ]]; then
+    answer=$(resolve_via_plain_dns "$domain" "$server_ip")
+  else
+    answer=$(resolve_via_dig "$domain" "$server_ip" "$transport")
+  fi
+
+  if [[ -n "$answer" ]]; then
     echo "available"
   else
     echo "blocked"
@@ -716,7 +727,7 @@ probe_resolver_transport() {
 
 check_encrypted_dns_servers() {
   local test_domain="rutracker.org"
-  local entry name ip doh_status dot_status
+  local entry name ip udp_status doh_status dot_status
   local table_rows=()
   local i tmp_dir
 
@@ -727,6 +738,7 @@ check_encrypted_dns_servers() {
 
   for i in "${!ENCRYPTED_DNS_SERVERS[@]}"; do
     ip="${ENCRYPTED_DNS_SERVERS[$i]##*|}"
+    probe_resolver_transport "$test_domain" "$ip" "udp" >"$tmp_dir/${i}_udp" &
     probe_resolver_transport "$test_domain" "$ip" "https" >"$tmp_dir/${i}_https" &
     probe_resolver_transport "$test_domain" "$ip" "tls" >"$tmp_dir/${i}_tls" &
   done
@@ -736,6 +748,12 @@ check_encrypted_dns_servers() {
     entry="${ENCRYPTED_DNS_SERVERS[$i]}"
     name="${entry%%|*}"
     ip="${entry##*|}"
+
+    if [[ "$(<"$tmp_dir/${i}_udp")" == "available" ]]; then
+      udp_status="$MSG_AVAILABLE"
+    else
+      udp_status="$MSG_BLOCKED"
+    fi
 
     if [[ "$(<"$tmp_dir/${i}_https")" == "available" ]]; then
       AVAILABLE_DOH+=("$entry")
@@ -751,19 +769,20 @@ check_encrypted_dns_servers() {
       dot_status="$MSG_BLOCKED"
     fi
 
-    table_rows+=("$(printf "%s%b\t%s\t%s\t%s" \
+    table_rows+=("$(printf "%s%b\t%s\t%s\t%s\t%s" \
       "$name" "$COLOR_RESET" "$ip" \
+      "$(colorize_summary "$udp_status")" \
       "$(colorize_summary "$doh_status")" \
       "$(colorize_summary "$dot_status")")")
   done
 
   rm -rf "$tmp_dir"
 
-  printf "\n%bEncrypted DNS (DoH/DoT) availability:%b\n\n" "$COLOR_WHITE" "$COLOR_RESET"
+  printf "\n%bDNS resolver availability:%b\n\n" "$COLOR_WHITE" "$COLOR_RESET"
 
   {
-    printf "\033[1m%b%s\t%s\t%s\t%s%b\033[0m\n" \
-      "$COLOR_WHITE" "Resolver" "IP" "DoH" "DoT" "$COLOR_RESET"
+    printf "\033[1m%b%s\t%s\t%s\t%s\t%s%b\033[0m\n" \
+      "$COLOR_WHITE" "Resolver" "IP" "UDP" "DoH" "DoT" "$COLOR_RESET"
     printf "%s\n" "${table_rows[@]}"
   } | column -t -s $'\t'
 }

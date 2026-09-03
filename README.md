@@ -19,7 +19,7 @@ A bash script for checking the accessibility of websites potentially affected by
 
 - Tests both HTTP and HTTPS protocols for each domain
 - Detects different access scenarios: available, blocked, redirected, or access denied
-- Checks encrypted DNS (DoH/DoT) availability for popular resolvers
+- Checks resolver availability over UDP, DoH and DoT for popular resolvers
 - Detects DNS hijacking by comparing regular DNS answers with an encrypted resolver
 - Includes predefined lists of commonly DPI-blocked and geo-restricted websites
 - Supports custom domain lists via file input
@@ -84,7 +84,7 @@ bash <(wget -qO- https://censorcheck.mirror.vrnt.xyz) --mode dpi
 # Check DPI-blocked sites using IPv6
 ./censorcheck.sh --mode dpi --ipv6
 
-# Run only DNS checks (DoH/DoT availability and hijacking detection)
+# Run only DNS checks (UDP/DoH/DoT availability and hijacking detection)
 ./censorcheck.sh --mode dns
 
 # Check custom domain list with increased timeout and retries
@@ -121,7 +121,7 @@ Options:
   -d, --domain       Specify a single domain to check
   --http-only        Check only HTTP protocol
   --https-only       Check only HTTPS protocol
-  --no-dns           Skip DNS checks (DoH/DoT availability and hijacking detection)
+  --no-dns           Skip DNS checks (UDP/DoH/DoT availability and hijacking detection)
   --no-header        Do not print the script header with current settings
   -j, --json         Output results in JSON format
 
