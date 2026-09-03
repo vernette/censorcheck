@@ -2,9 +2,9 @@
 
 A bash script for checking the accessibility of websites potentially affected by Deep Packet Inspection (DPI) blocking or geographic restrictions.
 
-![image](https://i.imgur.com/JFrXuml.png)
-![image](https://i.imgur.com/pydzUmH.png)
-![image](https://i.imgur.com/RngYFqm.png)
+![image](https://i.imgur.com/GHEkbRs.png)
+![image](https://i.imgur.com/U7bsrDS.png)
+![image](https://i.imgur.com/7uY4VSQ.png)
 
 ## Important note about status codes
 
