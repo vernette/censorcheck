@@ -11,7 +11,14 @@ readonly COLOR_ORANGE="\033[33m"
 readonly COLOR_RESET="\033[0m"
 readonly CURL_SEPARATOR="--UNIQUE-SEPARATOR--"
 
-readonly DNS_SERVERS=("1.1.1.1" "1.0.0.1" "8.8.8.8" "8.8.4.4" "9.9.9.9" "9.9.9.10" "77.88.8.8" "77.88.8.1")
+readonly DNS_SERVERS=(
+  "1.1.1.1" "1.0.0.1"
+  "8.8.8.8" "8.8.4.4"
+  "9.9.9.9" "9.9.9.10"
+  "94.140.14.14" "94.140.15.15"
+  "45.90.28.65" "45.90.30.65"
+  "77.88.8.8" "77.88.8.1"
+)
 readonly ENCRYPTED_DNS_SERVERS=(
   "Cloudflare|1.1.1.1"
   "Cloudflare|1.0.0.1"
@@ -19,6 +26,10 @@ readonly ENCRYPTED_DNS_SERVERS=(
   "Google|8.8.4.4"
   "Quad9|9.9.9.9"
   "Quad9|9.9.9.10"
+  "AdGuard|94.140.14.14"
+  "AdGuard|94.140.15.15"
+  "NextDNS|45.90.28.65"
+  "NextDNS|45.90.30.65"
   "Yandex|77.88.8.8"
   "Yandex|77.88.8.1"
 )
