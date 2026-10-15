@@ -467,6 +467,11 @@ parse_arguments() {
   if [[ "$MODE" == "tg" ]] && ! $TG_CHECK; then
     error_exit "--no-tg cannot be used with --mode tg"
   fi
+
+  if [[ "$MODE" == "geoblock" ]]; then
+    DNS_CHECK=false
+    TG_CHECK=false
+  fi
 }
 
 print_proxy_setting() {
