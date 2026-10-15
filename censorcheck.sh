@@ -40,7 +40,7 @@ AVAILABLE_DOT=()
 # Default values
 TIMEOUT=5
 RETRIES=2
-MODE="both"
+MODE="all"
 USER_AGENT="Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:129.0) Gecko/20100101 Firefox/129.0"
 DOMAINS_FILE=""
 IP_VERSION="4"
@@ -144,7 +144,7 @@ Checks accessibility of websites that might be blocked by DPI or geolocation res
 
 Options:
   -h, --help         Display this help message and exit
-  -m, --mode         Set checking mode: 'dpi', 'geoblock', 'both' (dpi + geoblock), or 'dns' only (default: $MODE)
+  -m, --mode         Set checking mode: 'all' (dns + dpi + geoblock), 'dpi', 'geoblock' or 'dns' (default: $MODE)
   -t, --timeout      Set connection timeout in seconds (default: $TIMEOUT)
   -r, --retries      Set number of connection retries (default: $RETRIES)
   -u, --user-agent   Set custom User-Agent string (default: $USER_AGENT)
@@ -342,10 +342,12 @@ parse_arguments() {
         exit 0
         ;;
       -m | --mode)
-        if [[ $2 == "dpi" || $2 == "geoblock" || $2 == "dns" || $2 == "both" ]]; then
+        if [[ $2 == "both" ]]; then
+          MODE="all"
+        elif [[ $2 == "all" || $2 == "dpi" || $2 == "geoblock" || $2 == "dns" ]]; then
           MODE=$2
         else
-          error_exit "Invalid mode: $2. Valid modes are: dpi, geoblock, dns, both"
+          error_exit "Invalid mode: $2. Valid modes are: all, dpi, geoblock, dns"
         fi
         shift 2
         ;;
@@ -455,8 +457,8 @@ print_header() {
     dns)
       mode="DNS"
       ;;
-    both)
-      mode="DPI and Geoblock"
+    all)
+      mode="All"
       ;;
   esac
 
@@ -564,7 +566,7 @@ get_domains_to_check() {
       # TODO: Replace echo with function
       dpi) echo "${DPI_BLOCKED_SITES[@]}" ;;
       geoblock) echo "${GEO_BLOCKED_SITES[@]}" ;;
-      both) echo "${DPI_BLOCKED_SITES[@]}" "${GEO_BLOCKED_SITES[@]}" ;;
+      all) echo "${DPI_BLOCKED_SITES[@]}" "${GEO_BLOCKED_SITES[@]}" ;;
     esac
   else
     read_domains_from_file "$DOMAINS_FILE"
