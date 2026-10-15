@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-readonly SCRIPT_NAME=$(basename "$0")
+readonly SCRIPT_NAME="${0##*/}"
 readonly DEPENDENCIES=("curl" "dig" "jq" "column")
 
 readonly COLOR_WHITE="\033[97m"
@@ -218,6 +218,7 @@ get_package_manager() {
   fi
 
   if [[ -f /etc/os-release ]]; then
+    # shellcheck source=/dev/null
     . /etc/os-release
     case "$ID" in
       debian | ubuntu)
@@ -591,8 +592,8 @@ get_single_check_result() {
   fi
 
   response=$(execute_curl "$domain" "$protocol" "$follow_redirects" "$ip_version")
-  status_code="${response%%$CURL_SEPARATOR*}"
-  redirect_url="${response#*$CURL_SEPARATOR}"
+  status_code="${response%%"$CURL_SEPARATOR"*}"
+  redirect_url="${response#*"$CURL_SEPARATOR"}"
 
   jq -n \
     --argjson status "${status_code:-0}" \
