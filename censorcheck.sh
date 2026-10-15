@@ -10,6 +10,7 @@ readonly COLOR_BLUE="\033[36m"
 readonly COLOR_ORANGE="\033[33m"
 readonly COLOR_RESET="\033[0m"
 readonly CURL_SEPARATOR="--UNIQUE-SEPARATOR--"
+readonly SIDE_BY_SIDE_GAP=4
 
 readonly DNS_SERVERS=(
   "1.1.1.1" "1.0.0.1"
@@ -540,7 +541,45 @@ print_header() {
 }
 
 run_dns_checks() {
+  printf "\n"
   check_encrypted_dns_servers
+  check_dns_hijacking
+}
+
+print_side_by_side() {
+  awk -v gap="$SIDE_BY_SIDE_GAP" '
+    NR == FNR {
+      left[FNR] = $0
+      visible = $0
+      gsub(/\033\[[0-9;]*m/, "", visible)
+      left_width[FNR] = length(visible)
+      if (left_width[FNR] > width) width = left_width[FNR]
+      left_count = FNR
+      next
+    }
+    { right[FNR] = $0; right_count = FNR }
+    END {
+      count = left_count > right_count ? left_count : right_count
+      for (i = 1; i <= count; i++) {
+        if (right[i] == "") { print left[i]; continue }
+        printf "%s%" (width - left_width[i] + gap) "s%s\n", left[i], "", right[i]
+      }
+    }
+  ' "$1" "$2"
+}
+
+run_dns_and_telegram_checks() {
+  local dns_table tg_table
+
+  dns_table=$(mktemp)
+
+  printf "\n"
+  check_encrypted_dns_servers >"$dns_table"
+  tg_table=$(check_telegram_dcs)
+  print_side_by_side "$dns_table" <(printf "%s\n" "$tg_table")
+
+  rm -f "$dns_table"
+
   check_dns_hijacking
 }
 
@@ -802,7 +841,6 @@ check_encrypted_dns_servers() {
     done
   done
 
-  printf "\n"
   for i in "${!ENCRYPTED_DNS_SERVERS[@]}"; do
     entry="${ENCRYPTED_DNS_SERVERS[$i]}"
     show_progress "$((i + 1))" "${#ENCRYPTED_DNS_SERVERS[@]}" "${entry%%|*} ${entry##*|}"
@@ -845,11 +883,6 @@ check_encrypted_dns_servers() {
   rm -rf "$tmp_dir"
 
   printf "%bDNS resolver availability:%b\n\n" "$COLOR_WHITE" "$COLOR_RESET"
-
-  if [[ -n "$PROXY" ]]; then
-    printf "%b%s%b\n\n" \
-      "$COLOR_ORANGE" "DNS checks run from this machine, not through the proxy" "$COLOR_RESET"
-  fi
 
   {
     printf "\033[1m%b%s\t%s\t%s\t%s\t%s%b\033[0m\n" \
@@ -899,6 +932,11 @@ check_dns_hijacking() {
   reference=$(get_reference_resolver)
 
   printf "\n"
+  if [[ -n "$PROXY" ]]; then
+    printf "%b%s%b\n\n" \
+      "$COLOR_ORANGE" "DNS checks run from this machine, not through the proxy" "$COLOR_RESET"
+  fi
+
   if [[ -z "$reference" ]]; then
     printf "%b%s%b\n" \
       "$COLOR_ORANGE" \
@@ -1098,7 +1136,6 @@ check_telegram_dcs() {
     pids+=("$!")
   done
 
-  printf "\n"
   for i in "${!TELEGRAM_DCS[@]}"; do
     entry="${TELEGRAM_DCS[$i]}"
     show_progress "$((i + 1))" "${#TELEGRAM_DCS[@]}" "Telegram ${entry%%|*} ${entry##*|}"
@@ -1328,6 +1365,7 @@ run_checks_and_print() {
     if [[ "$MODE" == "dns" ]]; then
       run_dns_checks
     else
+      printf "\n"
       check_telegram_dcs
     fi
     return
@@ -1345,10 +1383,12 @@ run_checks_and_print() {
     if $SHOW_HEADER; then
       print_header
     fi
-    if $DNS_CHECK; then
+    if $DNS_CHECK && $TG_CHECK; then
+      run_dns_and_telegram_checks
+    elif $DNS_CHECK; then
       run_dns_checks
-    fi
-    if $TG_CHECK; then
+    elif $TG_CHECK; then
+      printf "\n"
       check_telegram_dcs
     fi
     if $SHOW_HEADER || $DNS_CHECK || $TG_CHECK; then
