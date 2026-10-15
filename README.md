@@ -111,7 +111,7 @@ Checks accessibility of websites that might be blocked by DPI or geolocation res
 
 Options:
   -h, --help         Display this help message and exit
-  -m, --mode         Set checking mode: 'dpi', 'geoblock', 'both' (dpi + geoblock), or 'dns' only (default: both)
+  -m, --mode         Set checking mode: 'all' (dns + dpi + geoblock), 'dpi', 'geoblock' or 'dns' (default: all)
   -t, --timeout      Set connection timeout in seconds (default: 5)
   -r, --retries      Set number of connection retries (default: 2)
   -u, --user-agent   Set custom User-Agent string (default: Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:129.0) Gecko/20100101 Firefox/129.0)
