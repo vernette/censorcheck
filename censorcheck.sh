@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 readonly SCRIPT_NAME="${0##*/}"
-readonly DEPENDENCIES=("curl" "dig" "jq" "column")
+readonly DEPENDENCIES=("curl" "dig" "jq" "column" "openssl")
 
 readonly COLOR_WHITE="\033[97m"
 readonly COLOR_RED="\033[31m"
@@ -33,6 +33,21 @@ readonly ENCRYPTED_DNS_SERVERS=(
   "Yandex|77.88.8.8"
   "Yandex|77.88.8.1"
 )
+readonly TELEGRAM_DCS=(
+  "DC1|149.154.175.50"
+  "DC2|149.154.167.51"
+  "DC2|95.161.76.100"
+  "DC3|149.154.175.100"
+  "DC4|149.154.167.91"
+  "DC5|149.154.171.5"
+  "DC5|91.108.56.130"
+)
+readonly TELEGRAM_PORT=443
+readonly MTPROTO_HEADER_BYTES=64
+readonly MTPROTO_INTERMEDIATE_TAG="eeeeeeee"
+readonly MTPROTO_REQ_PQ_MULTI="f18e7ebe"
+readonly MTPROTO_RES_PQ="63241605"
+readonly MTPROTO_RES_PQ_BYTES=44
 
 AVAILABLE_DOH=()
 AVAILABLE_DOT=()
@@ -49,6 +64,7 @@ SINGLE_DOMAIN=""
 PROTOCOL="both"
 JSON_OUTPUT=false
 DNS_CHECK=true
+TG_CHECK=true
 SHOW_HEADER=true
 
 readonly DPI_BLOCKED_SITES=(
@@ -144,7 +160,7 @@ Checks accessibility of websites that might be blocked by DPI or geolocation res
 
 Options:
   -h, --help         Display this help message and exit
-  -m, --mode         Set checking mode: 'all' (dns + dpi + geoblock), 'dpi', 'geoblock' or 'dns' (default: $MODE)
+  -m, --mode         Set checking mode: 'all' (dns + tg + dpi + geoblock), 'dpi', 'geoblock', 'dns' or 'tg' (default: $MODE)
   -t, --timeout      Set connection timeout in seconds (default: $TIMEOUT)
   -r, --retries      Set number of connection retries (default: $RETRIES)
   -u, --user-agent   Set custom User-Agent string (default: $USER_AGENT)
@@ -155,22 +171,24 @@ Options:
   --http-only        Test only HTTP
   --https-only       Test only HTTPS
   --no-dns           Skip DNS checks (UDP/DoH/DoT availability and hijacking detection)
+  --no-tg            Skip Telegram data center checks
   --no-header        Do not print the script header with current settings
   -j, --json         Output results in JSON format
 
 Examples:
-  $SCRIPT_NAME                               # Check all predefined domains with default settings
-  $SCRIPT_NAME --mode dpi                    # Check only DPI-blocked sites
-  $SCRIPT_NAME --timeout 10 --retries 3      # Use longer timeout and more retries
-  $SCRIPT_NAME --user-agent "MyAgent/1.0"    # Use custom User-Agent
-  $SCRIPT_NAME --file my-domains.txt         # Check domains from custom file
-  $SCRIPT_NAME --ipv6                        # Use IPv6 instead of IPv4
-  $SCRIPT_NAME --proxy 127.0.0.1:1080        # Use SOCKS5 proxy
-  $SCRIPT_NAME --domain example.com          # Check a single domain
-  $SCRIPT_NAME --http-only                   # Test only HTTP
-  $SCRIPT_NAME --https-only                  # Test only HTTPS
-  $SCRIPT_NAME --no-dns                      # Skip DNS checks
-  $SCRIPT_NAME --no-header                   # Do not print the script header
+  $SCRIPT_NAME                                  # Check all predefined domains with default settings
+  $SCRIPT_NAME --mode dpi                       # Check only DPI-blocked sites
+  $SCRIPT_NAME --timeout 10 --retries 3         # Use longer timeout and more retries
+  $SCRIPT_NAME --user-agent "MyAgent/1.0"       # Use custom User-Agent
+  $SCRIPT_NAME --file my-domains.txt            # Check domains from custom file
+  $SCRIPT_NAME --ipv6                           # Use IPv6 instead of IPv4
+  $SCRIPT_NAME --proxy 127.0.0.1:1080           # Use SOCKS5 proxy
+  $SCRIPT_NAME --domain example.com             # Check a single domain
+  $SCRIPT_NAME --http-only                      # Test only HTTP
+  $SCRIPT_NAME --https-only                     # Test only HTTPS
+  $SCRIPT_NAME --no-dns                         # Skip DNS checks
+  $SCRIPT_NAME --mode tg --proxy 127.0.0.1:1080 # Check Telegram data centers through a SOCKS5 proxy
+  $SCRIPT_NAME --no-header                      # Do not print the script header
 
 The domain file should contain one domain per line. Lines starting with # are ignored
 EOF
@@ -344,10 +362,10 @@ parse_arguments() {
       -m | --mode)
         if [[ $2 == "both" ]]; then
           MODE="all"
-        elif [[ $2 == "all" || $2 == "dpi" || $2 == "geoblock" || $2 == "dns" ]]; then
+        elif [[ $2 == "all" || $2 == "dpi" || $2 == "geoblock" || $2 == "dns" || $2 == "tg" ]]; then
           MODE=$2
         else
-          error_exit "Invalid mode: $2. Valid modes are: all, dpi, geoblock, dns"
+          error_exit "Invalid mode: $2. Valid modes are: all, dpi, geoblock, dns, tg"
         fi
         shift 2
         ;;
@@ -423,6 +441,10 @@ parse_arguments() {
         DNS_CHECK=false
         shift
         ;;
+      --no-tg)
+        TG_CHECK=false
+        shift
+        ;;
       --no-header)
         SHOW_HEADER=false
         shift
@@ -439,6 +461,16 @@ parse_arguments() {
 
   if [[ "$MODE" == "dns" ]] && ! $DNS_CHECK; then
     error_exit "--no-dns cannot be used with --mode dns"
+  fi
+
+  if [[ "$MODE" == "tg" ]] && ! $TG_CHECK; then
+    error_exit "--no-tg cannot be used with --mode tg"
+  fi
+}
+
+print_proxy_setting() {
+  if [[ -n "$PROXY" ]]; then
+    printf "SOCKS5 proxy set to: %b%s%b\n" "$COLOR_WHITE" "$PROXY" "$COLOR_RESET"
   fi
 }
 
@@ -457,6 +489,9 @@ print_header() {
     dns)
       mode="DNS"
       ;;
+    tg)
+      mode="Telegram"
+      ;;
     all)
       mode="All"
       ;;
@@ -471,6 +506,12 @@ print_header() {
   fi
 
   printf "Retries set to: %b%s%b\n" "$COLOR_WHITE" "$RETRIES" "$COLOR_RESET"
+
+  if [[ "$MODE" == "tg" ]]; then
+    print_proxy_setting
+    return
+  fi
+
   printf "User-Agent set to: %b%s%b\n" "$COLOR_WHITE" "$USER_AGENT" "$COLOR_RESET"
 
   if [[ -n "$DOMAINS_FILE" ]]; then
@@ -483,9 +524,7 @@ print_header() {
 
   printf "IP version set to: %bIPv%s%b\n" "$COLOR_WHITE" "$IP_VERSION" "$COLOR_RESET"
 
-  if [ -n "$PROXY" ]; then
-    printf "SOCKS5 proxy set to: %b%s%b\n" "$COLOR_WHITE" "$PROXY" "$COLOR_RESET"
-  fi
+  print_proxy_setting
 
   case $PROTOCOL in
     http)
@@ -928,6 +967,167 @@ check_dns_hijacking() {
     "$COLOR_ORANGE" "Configure encrypted DNS (DoH/DoT) on your system" "$COLOR_RESET"
 }
 
+hex_to_bin() {
+  local bytes=()
+  mapfile -t bytes < <(fold -w2 <<<"$1")
+  printf "%b" "$(printf '\\x%s' "${bytes[@]}")"
+}
+
+bin_to_hex() {
+  od -An -v -tx1 | tr -d ' \n'
+}
+
+reverse_hex() {
+  fold -w2 <<<"$1" | tac | tr -d '\n'
+}
+
+le32_hex() {
+  local value=$1
+  printf "%02x%02x%02x%02x" $((value & 255)) $((value >> 8 & 255)) $((value >> 16 & 255)) $((value >> 24 & 255))
+}
+
+aes_ctr() {
+  openssl enc -aes-256-ctr -K "$1" -iv "$2" -nosalt 2>/dev/null
+}
+
+random_obfuscated_header() {
+  local header
+
+  while true; do
+    header=$(head -c "$MTPROTO_HEADER_BYTES" /dev/urandom | bin_to_hex)
+    case "${header:0:8}" in
+      ef* | 48454144 | 504f5354 | 47455420 | 4f505449 | dddddddd | eeeeeeee | 16030102) continue ;;
+    esac
+    if [[ "${header:8:8}" == "00000000" ]]; then
+      continue
+    fi
+    echo "$header"
+    return
+  done
+}
+
+socks5_connect() {
+  local ip=$1
+  local port=$2
+  local reply a b c d
+
+  hex_to_bin "050100" >&3
+  reply=$(head -c 2 <&3 | bin_to_hex)
+  if [[ "$reply" != "0500" ]]; then
+    return 1
+  fi
+
+  IFS=. read -r a b c d <<<"$ip"
+  hex_to_bin "$(printf "05010001%02x%02x%02x%02x%04x" "$a" "$b" "$c" "$d" "$port")" >&3
+  reply=$(head -c 10 <&3 | bin_to_hex)
+  [[ "${reply:0:4}" == "0500" ]]
+}
+
+mtproto_exchange() {
+  local ip=$1
+  local dc_id=$2
+  local proxy=$3
+  local header nonce request key iv reversed decrypt_key decrypt_iv sealed reply plain
+
+  header=$(random_obfuscated_header)
+  header="${header:0:112}${MTPROTO_INTERMEDIATE_TAG}$(printf "%02x00" "$dc_id")${header:124:4}"
+  nonce=$(head -c 16 /dev/urandom | bin_to_hex)
+  # frame length, auth_key_id, msg_id, message length, constructor, nonce
+  request="28000000""0000000000000000""00000000$(le32_hex "$(date +%s)")""14000000""${MTPROTO_REQ_PQ_MULTI}${nonce}"
+
+  key=${header:16:64}
+  iv=${header:80:32}
+  reversed=$(reverse_hex "${header:16:96}")
+  decrypt_key=${reversed:0:64}
+  decrypt_iv=${reversed:64:32}
+  sealed=$(hex_to_bin "${header}${request}" | aes_ctr "$key" "$iv" | bin_to_hex)
+
+  if [[ -n "$proxy" ]]; then
+    exec 3<>"/dev/tcp/${proxy%:*}/${proxy##*:}" || return 1
+    socks5_connect "$ip" "$TELEGRAM_PORT" || return 1
+  else
+    exec 3<>"/dev/tcp/$ip/$TELEGRAM_PORT" || return 1
+  fi
+
+  hex_to_bin "${header:0:112}${sealed:112}" >&3
+  reply=$(head -c "$MTPROTO_RES_PQ_BYTES" <&3 | bin_to_hex)
+  if [[ ${#reply} -ne $((MTPROTO_RES_PQ_BYTES * 2)) ]]; then
+    return 1
+  fi
+
+  plain=$(hex_to_bin "$reply" | aes_ctr "$decrypt_key" "$decrypt_iv" | bin_to_hex)
+  # frame length, auth_key_id, msg_id, message length, constructor, nonce
+  [[ "${plain:48:8}" == "$MTPROTO_RES_PQ" && "${plain:56:32}" == "$nonce" ]]
+}
+
+probe_telegram_dc() {
+  local ip=$1
+  local dc_id=$2
+  local attempt exchange_script
+
+  exchange_script="$(declare -p TELEGRAM_PORT MTPROTO_HEADER_BYTES MTPROTO_INTERMEDIATE_TAG MTPROTO_REQ_PQ_MULTI MTPROTO_RES_PQ MTPROTO_RES_PQ_BYTES)
+$(declare -f hex_to_bin bin_to_hex reverse_hex le32_hex aes_ctr random_obfuscated_header socks5_connect mtproto_exchange)
+mtproto_exchange \"\$@\""
+
+  for ((attempt = 0; attempt <= RETRIES; attempt++)); do
+    if timeout "$TIMEOUT" bash -c "$exchange_script" _ "$ip" "$dc_id" "$PROXY" 2>/dev/null; then
+      echo "available"
+      return
+    fi
+  done
+
+  echo "blocked"
+}
+
+check_telegram_dcs() {
+  local entry name ip status i tmp_dir
+  local table_rows=()
+  local pids=()
+
+  tmp_dir=$(mktemp -d)
+
+  for i in "${!TELEGRAM_DCS[@]}"; do
+    entry="${TELEGRAM_DCS[$i]}"
+    name="${entry%%|*}"
+    probe_telegram_dc "${entry##*|}" "${name#DC}" >"$tmp_dir/$i" &
+    pids+=("$!")
+  done
+
+  printf "\n"
+  for i in "${!TELEGRAM_DCS[@]}"; do
+    entry="${TELEGRAM_DCS[$i]}"
+    show_progress "$((i + 1))" "${#TELEGRAM_DCS[@]}" "Telegram ${entry%%|*} ${entry##*|}"
+    wait "${pids[$i]}" || true
+  done
+  clear_progress
+
+  for i in "${!TELEGRAM_DCS[@]}"; do
+    entry="${TELEGRAM_DCS[$i]}"
+    name="${entry%%|*}"
+    ip="${entry##*|}"
+
+    if [[ "$(<"$tmp_dir/$i")" == "available" ]]; then
+      status="$MSG_AVAILABLE"
+    else
+      status="$MSG_BLOCKED"
+    fi
+
+    table_rows+=("$(printf "%s%b\t%s\t%s" \
+      "$name" "$COLOR_RESET" "$ip" \
+      "$(colorize_summary "$status")")")
+  done
+
+  rm -rf "$tmp_dir"
+
+  printf "%bTelegram DC availability:%b\n\n" "$COLOR_WHITE" "$COLOR_RESET"
+
+  {
+    printf "\033[1m%b%s\t%s\t%s%b\033[0m\n" \
+      "$COLOR_WHITE" "DC" "IP" "MTProto" "$COLOR_RESET"
+    printf "%s\n" "${table_rows[@]}"
+  } | column -t -s $'\t'
+}
+
 is_port_open() {
   local ip="$1"
   local port="$2"
@@ -1111,16 +1311,20 @@ run_checks_and_print() {
   local domains
   local all_results_json="[]"
 
-  if [[ "$MODE" == "dns" ]]; then
+  if [[ "$MODE" == "dns" || "$MODE" == "tg" ]]; then
     if $JSON_OUTPUT; then
-      error_exit "JSON output is not supported for dns mode"
+      error_exit "JSON output is not supported for $MODE mode"
     fi
 
     if $SHOW_HEADER; then
       print_header
     fi
 
-    run_dns_checks
+    if [[ "$MODE" == "dns" ]]; then
+      run_dns_checks
+    else
+      check_telegram_dcs
+    fi
     return
   fi
 
@@ -1139,7 +1343,10 @@ run_checks_and_print() {
     if $DNS_CHECK; then
       run_dns_checks
     fi
-    if $SHOW_HEADER || $DNS_CHECK; then
+    if $TG_CHECK; then
+      check_telegram_dcs
+    fi
+    if $SHOW_HEADER || $DNS_CHECK || $TG_CHECK; then
       printf "\n"
     fi
   fi
