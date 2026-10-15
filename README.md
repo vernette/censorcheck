@@ -20,6 +20,7 @@ A bash script for checking the accessibility of websites potentially affected by
 - Tests both HTTP and HTTPS protocols for each domain
 - Detects different access scenarios: available, blocked, redirected, or access denied
 - Checks resolver availability over UDP, DoH and DoT for popular resolvers
+- Checks Telegram data centers with a real MTProto handshake over the obfuscated transport official clients use, directly or through a SOCKS5 proxy
 - Detects DNS hijacking by comparing regular DNS answers with an encrypted resolver
 - Includes predefined lists of commonly DPI-blocked and geo-restricted websites
 - Supports custom domain lists via file input
@@ -40,6 +41,7 @@ The script contains predefined lists of websites commonly affected by:
 - dig
 - jq
 - column
+- openssl
 
 ## Usage
 
@@ -87,6 +89,9 @@ bash <(wget -qO- https://censorcheck.mirror.vrnt.xyz) --mode dpi
 # Run only DNS checks (UDP/DoH/DoT availability and hijacking detection)
 ./censorcheck.sh --mode dns
 
+# Run only Telegram data center checks
+./censorcheck.sh --mode tg
+
 # Check custom domain list with increased timeout and retries
 ./censorcheck.sh --file sites.txt --timeout 10 --retries 3
 
@@ -111,7 +116,7 @@ Checks accessibility of websites that might be blocked by DPI or geolocation res
 
 Options:
   -h, --help         Display this help message and exit
-  -m, --mode         Set checking mode: 'all' (dns + dpi + geoblock), 'dpi', 'geoblock' or 'dns' (default: all)
+  -m, --mode         Set checking mode: 'all' (dns + tg + dpi + geoblock), 'dpi', 'geoblock', 'dns' or 'tg' (default: all)
   -t, --timeout      Set connection timeout in seconds (default: 5)
   -r, --retries      Set number of connection retries (default: 2)
   -u, --user-agent   Set custom User-Agent string (default: Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:129.0) Gecko/20100101 Firefox/129.0)
@@ -122,21 +127,23 @@ Options:
   --http-only        Check only HTTP protocol
   --https-only       Check only HTTPS protocol
   --no-dns           Skip DNS checks (UDP/DoH/DoT availability and hijacking detection)
+  --no-tg            Skip Telegram data center checks
   --no-header        Do not print the script header with current settings
   -j, --json         Output results in JSON format
 
 Examples:
-  censorcheck.sh                               # Check all predefined domains with default settings
-  censorcheck.sh --mode dpi                    # Check only DPI-blocked sites
-  censorcheck.sh --timeout 10 --retries 3      # Use longer timeout and more retries
-  censorcheck.sh --user-agent "MyAgent/1.0"    # Use custom User-Agent
-  censorcheck.sh --file my-domains.txt         # Check domains from custom file
-  censorcheck.sh --ipv6                        # Use IPv6 instead of IPv4
-  censorcheck.sh --proxy 127.0.0.1:1080        # Check domains using SOCKS5 proxy
-  censorcheck.sh --domain example.com          # Check a single domain
-  censorcheck.sh --no-dns                      # Skip DNS checks
-  censorcheck.sh --no-header                   # Do not print the script header
-  censorcheck.sh --file my-domains.txt --json  # Check custom domains and output JSON
+  censorcheck.sh                                  # Check all predefined domains with default settings
+  censorcheck.sh --mode dpi                       # Check only DPI-blocked sites
+  censorcheck.sh --timeout 10 --retries 3         # Use longer timeout and more retries
+  censorcheck.sh --user-agent "MyAgent/1.0"       # Use custom User-Agent
+  censorcheck.sh --file my-domains.txt            # Check domains from custom file
+  censorcheck.sh --ipv6                           # Use IPv6 instead of IPv4
+  censorcheck.sh --proxy 127.0.0.1:1080           # Check domains using SOCKS5 proxy
+  censorcheck.sh --domain example.com             # Check a single domain
+  censorcheck.sh --no-dns                         # Skip DNS checks
+  censorcheck.sh --mode tg --proxy 127.0.0.1:1080 # Check Telegram data centers through a SOCKS5 proxy
+  censorcheck.sh --no-header                      # Do not print the script header
+  censorcheck.sh --file my-domains.txt --json     # Check custom domains and output JSON
 
 The domain file should contain one domain per line. Lines starting with # are ignored
 ```
