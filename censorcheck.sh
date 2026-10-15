@@ -846,6 +846,11 @@ check_encrypted_dns_servers() {
 
   printf "%bDNS resolver availability:%b\n\n" "$COLOR_WHITE" "$COLOR_RESET"
 
+  if [[ -n "$PROXY" ]]; then
+    printf "%b%s%b\n\n" \
+      "$COLOR_ORANGE" "DNS checks run from this machine, not through the proxy" "$COLOR_RESET"
+  fi
+
   {
     printf "\033[1m%b%s\t%s\t%s\t%s\t%s%b\033[0m\n" \
       "$COLOR_WHITE" "Resolver" "IP" "UDP" "DoH" "DoT" "$COLOR_RESET"
