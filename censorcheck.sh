@@ -744,6 +744,9 @@ check_encrypted_dns_servers() {
   local entry name ip udp_status doh_status dot_status
   local table_rows=()
   local i tmp_dir
+  local pids=()
+  local transports=("udp" "https" "tls")
+  local transport
 
   AVAILABLE_DOH=()
   AVAILABLE_DOT=()
@@ -752,11 +755,19 @@ check_encrypted_dns_servers() {
 
   for i in "${!ENCRYPTED_DNS_SERVERS[@]}"; do
     ip="${ENCRYPTED_DNS_SERVERS[$i]##*|}"
-    probe_resolver_transport "$test_domain" "$ip" "udp" >"$tmp_dir/${i}_udp" &
-    probe_resolver_transport "$test_domain" "$ip" "https" >"$tmp_dir/${i}_https" &
-    probe_resolver_transport "$test_domain" "$ip" "tls" >"$tmp_dir/${i}_tls" &
+    for transport in "${transports[@]}"; do
+      probe_resolver_transport "$test_domain" "$ip" "$transport" >"$tmp_dir/${i}_${transport}" &
+      pids+=("$!")
+    done
   done
-  wait
+
+  printf "\n"
+  for i in "${!ENCRYPTED_DNS_SERVERS[@]}"; do
+    entry="${ENCRYPTED_DNS_SERVERS[$i]}"
+    show_progress "$((i + 1))" "${#ENCRYPTED_DNS_SERVERS[@]}" "${entry%%|*} ${entry##*|}"
+    wait "${pids[@]:i*${#transports[@]}:${#transports[@]}}" || true
+  done
+  clear_progress
 
   for i in "${!ENCRYPTED_DNS_SERVERS[@]}"; do
     entry="${ENCRYPTED_DNS_SERVERS[$i]}"
@@ -792,7 +803,7 @@ check_encrypted_dns_servers() {
 
   rm -rf "$tmp_dir"
 
-  printf "\n%bDNS resolver availability:%b\n\n" "$COLOR_WHITE" "$COLOR_RESET"
+  printf "%bDNS resolver availability:%b\n\n" "$COLOR_WHITE" "$COLOR_RESET"
 
   {
     printf "\033[1m%b%s\t%s\t%s\t%s\t%s%b\033[0m\n" \
@@ -836,13 +847,14 @@ check_dns_hijacking() {
   local table_rows=()
   local hijacked_domain=""
   local spoofed_count=0
-  local test_domain i tmp_dir status
+  local test_domain domain_index i tmp_dir status
 
   local reference reference_entry reference_transport reference_name reference_ip
   reference=$(get_reference_resolver)
 
+  printf "\n"
   if [[ -z "$reference" ]]; then
-    printf "\n%b%s%b\n" \
+    printf "%b%s%b\n" \
       "$COLOR_ORANGE" \
       "Cannot verify DNS spoofing: no DoH/DoT server reachable, skipping check" \
       "$COLOR_RESET"
@@ -854,7 +866,9 @@ check_dns_hijacking() {
   reference_name="${reference_entry%%|*}"
   reference_ip="${reference_entry##*|}"
 
-  for test_domain in "${test_domains[@]}"; do
+  for domain_index in "${!test_domains[@]}"; do
+    test_domain="${test_domains[$domain_index]}"
+    show_progress "$((domain_index + 1))" "${#test_domains[@]}" "DNS hijacking with $test_domain"
     mapfile -t encrypted_ips < <(resolve_via_dig "$test_domain" "$reference_ip" "$reference_transport")
     [[ ${#encrypted_ips[@]} -eq 0 ]] && continue
 
@@ -884,15 +898,16 @@ check_dns_hijacking() {
       break
     fi
   done
+  clear_progress
 
   if [[ -z "$hijacked_domain" ]]; then
-    printf "\n%b%s%b %b(reference: %s over %s)%b\n" \
+    printf "%b%s%b %b(reference: %s over %s)%b\n" \
       "$COLOR_GREEN" "Good news, no DNS hijacking detected!" "$COLOR_RESET" \
       "$COLOR_WHITE" "$reference_name" "${reference_transport^^}" "$COLOR_RESET"
     return 0
   fi
 
-  printf "\n%b%s%b %s %b%s%b\n" \
+  printf "%b%s%b %s %b%s%b\n" \
     "$COLOR_RED" "DNS hijacking detected!" "$COLOR_RESET" \
     "$spoofed_count of ${#DNS_SERVERS[@]} plain DNS resolvers spoofed for" \
     "$COLOR_WHITE" "$hijacked_domain" "$COLOR_RESET"
@@ -1064,7 +1079,6 @@ add_text_result_from_json() {
 }
 
 print_table_results() {
-  printf "\n"
   {
     printf "\033[1m%b%s\t%s\t%s\t%s%b\033[0m\n" \
       "$COLOR_WHITE" \
