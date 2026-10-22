@@ -693,41 +693,25 @@ get_single_check_result() {
 
 gather_single_domain_result() {
   local domain=$1
-  local ipv6_supported
-  local http_ipv4=null http_ipv6=null https_ipv4=null https_ipv6=null
-
-  check_ipv6_support && ipv6_supported=true || ipv6_supported=false
+  local http_result=null https_result=null
 
   if [[ "$PROTOCOL" == "both" || "$PROTOCOL" == "http" ]]; then
-    http_ipv4=$(get_single_check_result "$domain" "HTTP" false 4)
-    if $ipv6_supported; then
-      http_ipv6=$(get_single_check_result "$domain" "HTTP" false 6)
-    fi
+    http_result=$(get_single_check_result "$domain" "HTTP" false "$IP_VERSION")
   fi
   if [[ "$PROTOCOL" == "both" || "$PROTOCOL" == "https" ]]; then
-    https_ipv4=$(get_single_check_result "$domain" "HTTPS" true 4)
-    if $ipv6_supported; then
-      https_ipv6=$(get_single_check_result "$domain" "HTTPS" true 6)
-    fi
+    https_result=$(get_single_check_result "$domain" "HTTPS" true "$IP_VERSION")
   fi
 
   jq -n \
     --arg service "$(get_domain_host "$domain")" \
-    --argjson http_ipv4 "$http_ipv4" \
-    --argjson http_ipv6 "$http_ipv6" \
-    --argjson https_ipv4 "$https_ipv4" \
-    --argjson https_ipv6 "$https_ipv6" \
+    --arg ip_key "ipv$IP_VERSION" \
+    --argjson http "$http_result" \
+    --argjson https "$https_result" \
     '
         {
           "service": $service,
-          "http": {
-            "ipv4": $http_ipv4,
-            "ipv6": $http_ipv6
-          },
-          "https": {
-            "ipv4": $https_ipv4,
-            "ipv6": $https_ipv6
-          }
+          "http": ({"ipv4": null, "ipv6": null} | .[$ip_key] = $http),
+          "https": ({"ipv4": null, "ipv6": null} | .[$ip_key] = $https)
         }
         '
 }
@@ -1451,16 +1435,6 @@ run_checks_and_print() {
   clear_progress
 
   if $JSON_OUTPUT; then
-    local ipv6_supported
-    check_ipv6_support && ipv6_supported=true || ipv6_supported=false
-
-    local ip_version_param_val
-    if $ipv6_supported; then
-      ip_version_param_val="IPv4 & IPv6"
-    else
-      ip_version_param_val="IPv4"
-    fi
-
     local params_json
 
     params_json=$(
@@ -1470,7 +1444,7 @@ run_checks_and_print() {
         --arg mode "${MODE^^}" \
         --arg user_agent "$USER_AGENT" \
         --arg domain_mode "$(if [[ -n "$DOMAINS_FILE" ]]; then echo "user domains from $DOMAINS_FILE"; elif [[ -n "$SINGLE_DOMAIN" ]]; then echo "single domain"; else echo "predefined domains"; fi)" \
-        --arg ip_version "$ip_version_param_val" \
+        --arg ip_version "IPv$IP_VERSION" \
         --arg protocol "$(if [[ "$PROTOCOL" == "both" ]]; then echo "HTTP and HTTPS"; elif [[ "$PROTOCOL" == "http" ]]; then echo "HTTP only"; else echo "HTTPS only"; fi)" \
         '[
           {"key":"timeout", "value":$timeout},
