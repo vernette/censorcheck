@@ -662,23 +662,15 @@ get_single_check_result() {
   local domain=$1
   local protocol=$2
   local follow_redirects=$3
-  local ip_version=$4
+  local port_open=$4
   local response status_code redirect_url
 
-  local port
-  [[ "${protocol,,}" == "https" ]] && port=443 || port=80
-
-  if [[ -z "$PROXY" ]]; then
-    local ip
-    ip=$(get_domain_ip "$domain" "$ip_version")
-
-    if [[ -n "$ip" ]] && ! is_port_open "$ip" "$port"; then
-      jq -n '{"status": -1, "redirect_url": null}'
-      return
-    fi
+  if ! $port_open; then
+    jq -n '{"status": -1, "redirect_url": null}'
+    return
   fi
 
-  response=$(execute_curl "$domain" "$protocol" "$follow_redirects" "$ip_version")
+  response=$(execute_curl "$domain" "$protocol" "$follow_redirects")
   status_code="${response%%"$CURL_SEPARATOR"*}"
   redirect_url="${response#*"$CURL_SEPARATOR"}"
 
@@ -695,13 +687,23 @@ get_single_check_result() {
 
 gather_single_domain_result() {
   local domain=$1
+  local http_port_open=$2
+  local https_port_open=$3
   local http_result=null https_result=null
+  local http_file http_probe
 
   if [[ "$PROTOCOL" == "both" || "$PROTOCOL" == "http" ]]; then
-    http_result=$(get_single_check_result "$domain" "HTTP" false "$IP_VERSION")
+    http_file=$(mktemp)
+    get_single_check_result "$domain" "HTTP" false "$http_port_open" >"$http_file" &
+    http_probe=$!
   fi
   if [[ "$PROTOCOL" == "both" || "$PROTOCOL" == "https" ]]; then
-    https_result=$(get_single_check_result "$domain" "HTTPS" true "$IP_VERSION")
+    https_result=$(get_single_check_result "$domain" "HTTPS" true "$https_port_open")
+  fi
+  if [[ -n "${http_probe:-}" ]]; then
+    wait "$http_probe" || true
+    http_result=$(<"$http_file")
+    rm -f "$http_file"
   fi
 
   jq -n \
@@ -1167,11 +1169,6 @@ is_port_open() {
   timeout "$TIMEOUT" bash -c "(echo >/dev/tcp/$ip/$port)" 2>/dev/null
 }
 
-is_ip_reachable() {
-  local ip="$1"
-  is_port_open "$ip" 80 || is_port_open "$ip" 443
-}
-
 make_json_error() {
   local domain="$1"
   local error_code="$2"
@@ -1284,23 +1281,21 @@ summarize_protocol_result() {
   summarize_status_description "$status" "$redirect"
 }
 
-add_text_result_row() {
+print_text_result_row() {
   local service=$1
   local ip=$2
   local http_cell=$3
   local https_cell=$4
 
-  TEXT_RESULTS+=("$(
-    jq -n \
-      --arg service "$service" \
-      --arg ip "$ip" \
-      --arg http "$http_cell" \
-      --arg https "$https_cell" \
-      '{service: $service, ip: $ip, http: $http, https: $https}'
-  )")
+  jq -c -n \
+    --arg service "$service" \
+    --arg ip "$ip" \
+    --arg http "$http_cell" \
+    --arg https "$https_cell" \
+    '{service: $service, ip: $ip, http: $http, https: $https}'
 }
 
-add_text_result_from_json() {
+print_text_result_from_json() {
   local result_json=$1
   local ip=$2
   local service
@@ -1310,7 +1305,58 @@ add_text_result_from_json() {
   http_cell=$(summarize_protocol_result "$result_json" "http")
   https_cell=$(summarize_protocol_result "$result_json" "https")
 
-  add_text_result_row "$service" "$ip" "$http_cell" "$https_cell"
+  print_text_result_row "$service" "$ip" "$http_cell" "$https_cell"
+}
+
+check_domain() {
+  local domain=$1
+  local host ip_address error_code error_message
+  local http_port_open=true https_port_open=true
+
+  host=$(get_domain_host "$domain")
+  ip_address=$(get_domain_ip "$domain")
+
+  if [[ -z "$ip_address" ]]; then
+    if domain_exists "$domain"; then
+      error_code="no_dns_record"
+      error_message="No $(get_record_type) record"
+    else
+      error_code="nxdomain"
+      error_message="Domain does not exist"
+    fi
+
+    if $JSON_OUTPUT; then
+      make_json_error "$host" "$error_code" "$error_message" | jq -c .
+    else
+      print_text_result_row "$host" "N/A" "$error_message" "$error_message"
+    fi
+    return
+  fi
+
+  if [[ -z "$PROXY" ]]; then
+    is_port_open "$ip_address" 80 &
+    local http_probe=$!
+    is_port_open "$ip_address" 443 || https_port_open=false
+    wait "$http_probe" || http_port_open=false
+  fi
+
+  if ! $http_port_open && ! $https_port_open; then
+    if $JSON_OUTPUT; then
+      make_json_error "$host" blocked_by_ip "$MSG_BLOCKED_BY_IP" | jq -c .
+    else
+      print_text_result_row "$host" "$ip_address" "$MSG_BLOCKED_BY_IP" "$MSG_BLOCKED_BY_IP"
+    fi
+    return
+  fi
+
+  local domain_result_json
+  domain_result_json=$(gather_single_domain_result "$domain" "$http_port_open" "$https_port_open")
+
+  if $JSON_OUTPUT; then
+    jq -c . <<<"$domain_result_json"
+  else
+    print_text_result_from_json "$domain_result_json" "$ip_address"
+  fi
 }
 
 print_table_results() {
@@ -1366,8 +1412,6 @@ run_checks_and_print() {
 
   local total_domains=${#domains[@]}
 
-  local current_index=0
-
   TEXT_RESULTS=()
 
   if ! $JSON_OUTPUT; then
@@ -1387,56 +1431,28 @@ run_checks_and_print() {
     fi
   fi
 
-  for domain in "${domains[@]}"; do
-    ((++current_index))
-    show_progress "$current_index" "$total_domains" "$domain"
+  local i tmp_dir
+  local pids=()
 
-    local host ip_address
+  tmp_dir=$(mktemp -d)
 
-    host=$(get_domain_host "$domain")
-    ip_address=$(get_domain_ip "$domain")
+  # ponytail: one background job per domain, add a concurrency limit if huge --file lists overload the host
+  for i in "${!domains[@]}"; do
+    check_domain "${domains[$i]}" >"$tmp_dir/$i" &
+    pids+=("$!")
+  done
 
-    if [[ -z "$ip_address" ]]; then
-      local error_code error_message
-
-      if domain_exists "$domain"; then
-        error_code="no_dns_record"
-        error_message="No $(get_record_type) record"
-      else
-        error_code="nxdomain"
-        error_message="Domain does not exist"
-      fi
-
-      if $JSON_OUTPUT; then
-        all_results_json=$(echo "$all_results_json" | jq --argjson item "$(make_json_error "$host" "$error_code" "$error_message")" '. + [$item]')
-      else
-        add_text_result_row "$host" "N/A" "$error_message" "$error_message"
-      fi
-      continue
-    fi
-
-    if [[ -z "$PROXY" ]] && ! is_ip_reachable "$ip_address"; then
-      if $JSON_OUTPUT; then
-        all_results_json=$(echo "$all_results_json" | jq --argjson item "$(make_json_error "$host" blocked_by_ip "$MSG_BLOCKED_BY_IP")" '. + [$item]')
-      else
-        add_text_result_row "$host" "$ip_address" "$MSG_BLOCKED_BY_IP" "$MSG_BLOCKED_BY_IP"
-      fi
-      continue
-    fi
-
-    local domain_result_json
-    domain_result_json=$(gather_single_domain_result "$domain")
-
-    if $JSON_OUTPUT; then
-      all_results_json=$(echo "$all_results_json" | jq --argjson item "$domain_result_json" '. + [$item]')
-    else
-      add_text_result_from_json "$domain_result_json" "$ip_address"
-    fi
+  for i in "${!domains[@]}"; do
+    show_progress "$((i + 1))" "$total_domains" "${domains[$i]}"
+    wait "${pids[$i]}" || true
   done
 
   clear_progress
 
   if $JSON_OUTPUT; then
+    all_results_json=$(for i in "${!domains[@]}"; do cat "$tmp_dir/$i"; done | jq -s .)
+    rm -rf "$tmp_dir"
+
     local params_json
 
     params_json=$(
@@ -1471,6 +1487,11 @@ run_checks_and_print() {
 
     return
   fi
+
+  for i in "${!domains[@]}"; do
+    TEXT_RESULTS+=("$(<"$tmp_dir/$i")")
+  done
+  rm -rf "$tmp_dir"
 
   print_table_results
 }
