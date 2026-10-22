@@ -11,6 +11,8 @@ readonly COLOR_ORANGE="\033[33m"
 readonly COLOR_RESET="\033[0m"
 readonly CURL_SEPARATOR="--UNIQUE-SEPARATOR--"
 readonly SIDE_BY_SIDE_GAP=4
+readonly PROGRESS_POLL_INTERVAL=0.2
+readonly PROGRESS_LABELS_WIDTH=50
 
 readonly DNS_SERVERS=(
   "1.1.1.1" "1.0.0.1"
@@ -138,6 +140,61 @@ show_progress() {
       "$COLOR_WHITE" \
       "$domain" \
       "$COLOR_RESET" >&2
+  fi
+}
+
+format_pending_labels() {
+  local summary="" hidden=0
+  local label name
+
+  if [[ $# -eq 1 ]]; then
+    printf "%s" "$1"
+    return
+  fi
+
+  for label in "$@"; do
+    name=${label%% *}
+    if [[ -z "$summary" ]]; then
+      summary=$name
+    elif [[ $hidden -eq 0 ]] && ((${#summary} + ${#name} + 2 <= PROGRESS_LABELS_WIDTH)); then
+      summary+=", $name"
+    else
+      hidden=$((hidden + 1))
+    fi
+  done
+
+  if [[ $hidden -gt 0 ]]; then
+    summary+=" +$hidden"
+  fi
+
+  printf "%s" "$summary"
+}
+
+wait_with_progress() {
+  local -n job_pids=$1
+  local -n job_labels=$2
+  local prefix=${3:-}
+  local i
+  local pending=()
+  local start=$SECONDS
+
+  while true; do
+    pending=()
+    for i in "${!job_pids[@]}"; do
+      if kill -0 "${job_pids[$i]}" 2>/dev/null; then
+        pending+=("${job_labels[$i]}")
+      fi
+    done
+
+    [[ ${#pending[@]} -eq 0 ]] && break
+
+    show_progress "$((${#job_pids[@]} - ${#pending[@]}))" "${#job_pids[@]}" \
+      "$prefix$(format_pending_labels "${pending[@]}") ($((SECONDS - start))s)"
+    sleep "$PROGRESS_POLL_INTERVAL"
+  done
+
+  if [[ ${#job_pids[@]} -gt 0 ]]; then
+    wait "${job_pids[@]}" || true
   fi
 }
 
@@ -819,6 +876,7 @@ check_encrypted_dns_servers() {
   local table_rows=()
   local i tmp_dir
   local pids=()
+  local labels=()
   local transports=("udp" "https" "tls")
   local transport
 
@@ -828,18 +886,19 @@ check_encrypted_dns_servers() {
   tmp_dir=$(mktemp -d)
 
   for i in "${!ENCRYPTED_DNS_SERVERS[@]}"; do
-    ip="${ENCRYPTED_DNS_SERVERS[$i]##*|}"
-    for transport in "${transports[@]}"; do
-      probe_resolver_transport "$test_domain" "$ip" "$transport" >"$tmp_dir/${i}_${transport}" &
-      pids+=("$!")
-    done
+    entry="${ENCRYPTED_DNS_SERVERS[$i]}"
+    ip="${entry##*|}"
+    (
+      for transport in "${transports[@]}"; do
+        probe_resolver_transport "$test_domain" "$ip" "$transport" >"$tmp_dir/${i}_${transport}" &
+      done
+      wait
+    ) &
+    pids+=("$!")
+    labels+=("${entry%%|*} $ip")
   done
 
-  for i in "${!ENCRYPTED_DNS_SERVERS[@]}"; do
-    entry="${ENCRYPTED_DNS_SERVERS[$i]}"
-    show_progress "$((i + 1))" "${#ENCRYPTED_DNS_SERVERS[@]}" "${entry%%|*} ${entry##*|}"
-    wait "${pids[@]:i*${#transports[@]}:${#transports[@]}}" || true
-  done
+  wait_with_progress pids labels
   clear_progress
 
   for i in "${!ENCRYPTED_DNS_SERVERS[@]}"; do
@@ -1123,6 +1182,7 @@ check_telegram_dcs() {
   local entry name ip status i tmp_dir
   local table_rows=()
   local pids=()
+  local labels=()
 
   tmp_dir=$(mktemp -d)
 
@@ -1131,13 +1191,10 @@ check_telegram_dcs() {
     name="${entry%%|*}"
     probe_telegram_dc "${entry##*|}" "${name#DC}" >"$tmp_dir/$i" &
     pids+=("$!")
+    labels+=("$name ${entry##*|}")
   done
 
-  for i in "${!TELEGRAM_DCS[@]}"; do
-    entry="${TELEGRAM_DCS[$i]}"
-    show_progress "$((i + 1))" "${#TELEGRAM_DCS[@]}" "Telegram ${entry%%|*} ${entry##*|}"
-    wait "${pids[$i]}" || true
-  done
+  wait_with_progress pids labels "Telegram "
   clear_progress
 
   for i in "${!TELEGRAM_DCS[@]}"; do
@@ -1402,19 +1459,18 @@ run_checks_and_print() {
 
   read -r -a domains <<<"$(get_domains_to_check)"
 
-  local total_domains=${#domains[@]}
-
   TEXT_RESULTS=()
 
   local i tmp_dir
   local pids=()
+  local labels=()
 
   tmp_dir=$(mktemp -d)
 
-  # ponytail: one background job per domain, add a concurrency limit if huge --file lists overload the host
   for i in "${!domains[@]}"; do
     check_domain "${domains[$i]}" >"$tmp_dir/$i" &
     pids+=("$!")
+    labels+=("$(get_domain_host "${domains[$i]}")")
   done
 
   if ! $JSON_OUTPUT; then
@@ -1434,10 +1490,7 @@ run_checks_and_print() {
     fi
   fi
 
-  for i in "${!domains[@]}"; do
-    show_progress "$((i + 1))" "$total_domains" "${domains[$i]}"
-    wait "${pids[$i]}" || true
-  done
+  wait_with_progress pids labels
 
   clear_progress
 

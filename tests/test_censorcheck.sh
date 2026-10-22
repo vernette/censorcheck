@@ -21,6 +21,43 @@ assert_eq() {
   FAILURES=$((FAILURES + 1))
 }
 
+test_format_pending_labels() {
+  assert_eq "pending single keeps details" "DC5 91.108.56.130" "$(format_pending_labels "DC5 91.108.56.130")"
+  assert_eq "pending list short names" "DC1, DC2, DC3" \
+    "$(format_pending_labels "DC1 149.154.175.50" "DC2 149.154.167.51" "DC3 149.154.175.100")"
+
+  local domains=()
+  local i
+  for i in {1..20}; do
+    domains+=("domain$i.example.com")
+  done
+  assert_eq "pending list truncated" "domain1.example.com, domain2.example.com +18" \
+    "$(format_pending_labels "${domains[@]}")"
+}
+
+test_wait_with_progress() {
+  local pids=()
+  local labels=("slow" "fast")
+  local start progress
+
+  sleep 1.3 &
+  pids+=("$!")
+  sleep 0.4 &
+  pids+=("$!")
+
+  start=$EPOCHREALTIME
+  progress=$(wait_with_progress pids labels 2>&1)
+
+  assert_eq "wait progress waits for all jobs" "1" \
+    "$(awk -v a="$start" -v b="$EPOCHREALTIME" 'BEGIN {print (b - a >= 1.2) ? 1 : 0}')"
+  assert_eq "wait progress lists pending jobs" "1" "$([[ "$progress" == *"[0/2] Checking:"*"slow, fast (0s)"* ]] && echo 1)"
+  assert_eq "wait progress counts finished jobs" "1" "$([[ "$progress" == *"[1/2] Checking:"*"slow ("* ]] && echo 1)"
+
+  local no_pids=()
+  local no_labels=()
+  assert_eq "wait progress without jobs" "" "$(wait_with_progress no_pids no_labels 2>&1)"
+}
+
 test_get_domain_host() {
   assert_eq "domain host with path" "redirector.googlevideo.com" \
     "$(get_domain_host "redirector.googlevideo.com/report_mapping?di=no")"
@@ -143,6 +180,8 @@ test_parse_arguments() {
   assert_eq "args dns with --no-dns exits" "1" "$?"
 }
 
+test_format_pending_labels
+test_wait_with_progress
 test_get_domain_host
 test_get_record_type
 test_read_domains_from_file
