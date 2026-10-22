@@ -14,14 +14,6 @@ readonly SIDE_BY_SIDE_GAP=4
 readonly PROGRESS_POLL_INTERVAL=0.2
 readonly PROGRESS_LABELS_WIDTH=50
 
-readonly DNS_SERVERS=(
-  "1.1.1.1" "1.0.0.1"
-  "8.8.8.8" "8.8.4.4"
-  "9.9.9.9" "9.9.9.10"
-  "94.140.14.14" "94.140.15.15"
-  "45.90.28.65" "45.90.30.65"
-  "77.88.8.8" "77.88.8.1"
-)
 readonly ENCRYPTED_DNS_SERVERS=(
   "Cloudflare|1.1.1.1"
   "Cloudflare|1.0.0.1"
@@ -54,6 +46,7 @@ readonly MTPROTO_RES_PQ_BYTES=44
 
 AVAILABLE_DOH=()
 AVAILABLE_DOT=()
+DNS_SPOOF_STATUSES=()
 
 # Default values
 TIMEOUT=5
@@ -605,9 +598,15 @@ print_header() {
 }
 
 run_dns_checks() {
+  local hijacking_summary
+
+  hijacking_summary=$(mktemp)
+
   printf "\n"
-  check_encrypted_dns_servers
-  check_dns_hijacking
+  check_encrypted_dns_servers "$hijacking_summary"
+  cat "$hijacking_summary"
+
+  rm -f "$hijacking_summary"
 }
 
 print_side_by_side() {
@@ -633,18 +632,18 @@ print_side_by_side() {
 }
 
 run_dns_and_telegram_checks() {
-  local dns_table tg_table
+  local dns_table hijacking_summary tg_table
 
   dns_table=$(mktemp)
+  hijacking_summary=$(mktemp)
 
   printf "\n"
-  check_encrypted_dns_servers >"$dns_table"
+  check_encrypted_dns_servers "$hijacking_summary" >"$dns_table"
   tg_table=$(check_telegram_dcs)
   print_side_by_side "$dns_table" <(printf "%s\n" "$tg_table")
+  cat "$hijacking_summary"
 
-  rm -f "$dns_table"
-
-  check_dns_hijacking
+  rm -f "$dns_table" "$hijacking_summary"
 }
 
 read_domains_from_file() {
@@ -871,6 +870,7 @@ probe_resolver_transport() {
 }
 
 check_encrypted_dns_servers() {
+  local hijacking_summary=$1
   local test_domain="rutracker.org"
   local entry name ip udp_status doh_status dot_status
   local table_rows=()
@@ -879,6 +879,7 @@ check_encrypted_dns_servers() {
   local labels=()
   local transports=("udp" "https" "tls")
   local transport
+  local columns=("Resolver" "IP" "UDP" "DoH" "DoT")
 
   AVAILABLE_DOH=()
   AVAILABLE_DOT=()
@@ -935,11 +936,19 @@ check_encrypted_dns_servers() {
 
   rm -rf "$tmp_dir"
 
+  check_dns_hijacking >"$hijacking_summary"
+
+  if [[ ${#DNS_SPOOF_STATUSES[@]} -gt 0 ]]; then
+    columns+=("Spoofing")
+    for i in "${!table_rows[@]}"; do
+      table_rows[i]+=$'\t'"$(colorize_summary "${DNS_SPOOF_STATUSES[$i]}")"
+    done
+  fi
+
   printf "%bDNS resolver availability:%b\n\n" "$COLOR_WHITE" "$COLOR_RESET"
 
   {
-    printf "\033[1m%b%s\t%s\t%s\t%s\t%s%b\033[0m\n" \
-      "$COLOR_WHITE" "Resolver" "IP" "UDP" "DoH" "DoT" "$COLOR_RESET"
+    printf "\033[1m%b%s%b\033[0m\n" "$COLOR_WHITE" "$(IFS=$'\t' && echo "${columns[*]}")" "$COLOR_RESET"
     printf "%s\n" "${table_rows[@]}"
   } | column -t -s $'\t'
 }
@@ -976,11 +985,12 @@ classify_plain_answer() {
 check_dns_hijacking() {
   local test_domains=("rutracker.org" "linkedin.com" "flibusta.is")
   local encrypted_ips=()
-  local table_rows=()
   local hijacked_domain=""
   local spoofed_count=0
   local test_domain domain_index i tmp_dir status
   local pids=()
+
+  DNS_SPOOF_STATUSES=()
 
   local reference reference_entry reference_transport reference_name reference_ip
   reference=$(get_reference_resolver)
@@ -1011,24 +1021,24 @@ check_dns_hijacking() {
     [[ ${#encrypted_ips[@]} -eq 0 ]] && continue
 
     spoofed_count=0
-    table_rows=()
+    DNS_SPOOF_STATUSES=()
     tmp_dir=$(mktemp -d)
 
     pids=()
-    for i in "${!DNS_SERVERS[@]}"; do
-      resolve_via_plain_dns "$test_domain" "${DNS_SERVERS[$i]}" >"$tmp_dir/$i" &
+    for i in "${!ENCRYPTED_DNS_SERVERS[@]}"; do
+      resolve_via_plain_dns "$test_domain" "${ENCRYPTED_DNS_SERVERS[$i]##*|}" >"$tmp_dir/$i" &
       pids+=("$!")
     done
     wait "${pids[@]}" || true
 
-    for i in "${!DNS_SERVERS[@]}"; do
+    for i in "${!ENCRYPTED_DNS_SERVERS[@]}"; do
       status=$(classify_plain_answer "$(<"$tmp_dir/$i")" encrypted_ips)
 
       if [[ "$status" == "$MSG_SPOOFED"* ]]; then
         spoofed_count=$((spoofed_count + 1))
       fi
 
-      table_rows+=("$(printf "%s\t%s" "${DNS_SERVERS[$i]}" "$(colorize_summary "$status")")")
+      DNS_SPOOF_STATUSES+=("$status")
     done
 
     rm -rf "$tmp_dir"
@@ -1049,17 +1059,12 @@ check_dns_hijacking() {
 
   printf "%b%s%b %s %b%s%b\n" \
     "$COLOR_RED" "DNS hijacking detected!" "$COLOR_RESET" \
-    "$spoofed_count of ${#DNS_SERVERS[@]} plain DNS resolvers spoofed for" \
+    "$spoofed_count of ${#ENCRYPTED_DNS_SERVERS[@]} plain DNS resolvers spoofed for" \
     "$COLOR_WHITE" "$hijacked_domain" "$COLOR_RESET"
 
-  printf "%bReference: %s (%s) over %s -> %s%b\n\n" \
+  printf "%bReference: %s (%s) over %s -> %s%b\n" \
     "$COLOR_WHITE" "$reference_name" "$reference_ip" "${reference_transport^^}" \
     "$(printf "%s, " "${encrypted_ips[@]}" | sed 's/, $//')" "$COLOR_RESET"
-
-  {
-    printf "\033[1m%b%s\t%s%b\033[0m\n" "$COLOR_WHITE" "Resolver" "Result" "$COLOR_RESET"
-    printf "%s\n" "${table_rows[@]}"
-  } | column -t -s $'\t'
 
   printf "\n%b%s%b\n%b%s%b\n" \
     "$COLOR_ORANGE" "DNS hijacking may affect the accuracy of this check" "$COLOR_RESET" \
