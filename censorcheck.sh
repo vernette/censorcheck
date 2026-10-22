@@ -148,6 +148,8 @@ clear_progress() {
 }
 
 cleanup() {
+  trap '' TERM
+  kill -TERM 0 2>/dev/null
   clear_progress
   exit 130
 }
