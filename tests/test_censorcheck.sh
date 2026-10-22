@@ -60,6 +60,13 @@ test_summarize_protocol_result() {
   assert_eq "protocol result available" "$MSG_AVAILABLE (200)" "$(summarize_protocol_result "$result" http)"
   assert_eq "protocol result missing" "N/A" "$(summarize_protocol_result "$result" https)"
 
+  local redirect='{"service":"x.com","http":{"ipv4":null,"ipv6":{"status":301,"redirect_url":"https://x.com/"}},"https":null}'
+  IP_VERSION="6"
+  assert_eq "protocol result ipv6 redirect" "$MSG_REDIRECT (301) -> https://x.com/" \
+    "$(summarize_protocol_result "$redirect" http)"
+  assert_eq "protocol result ipv6 missing" "N/A" "$(summarize_protocol_result "$result" http)"
+  IP_VERSION="4"
+
   PROTOCOL="https"
   assert_eq "protocol result skipped" "Skipped" "$(summarize_protocol_result "$result" http)"
   PROTOCOL="both"

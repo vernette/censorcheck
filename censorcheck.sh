@@ -1263,21 +1263,17 @@ summarize_protocol_result() {
     return
   fi
 
-  local data
-  data=$(jq -c --arg protocol "$protocol" --arg ip_version "$IP_VERSION" '
-      if $ip_version == "6" then .[$protocol].ipv6
-      else .[$protocol].ipv4
-      end
+  local data status redirect
+  data=$(jq -r --arg protocol "$protocol" --arg ip_key "ipv$IP_VERSION" '
+      .[$protocol][$ip_key] // empty | "\(.status)\t\(.redirect_url // "")"
     ' <<<"$result_json")
 
-  if [[ "$data" == "null" || -z "$data" ]]; then
+  if [[ -z "$data" ]]; then
     echo "N/A"
     return
   fi
 
-  local status redirect
-  status=$(jq -r '.status' <<<"$data")
-  redirect=$(jq -r '.redirect_url // ""' <<<"$data")
+  IFS=$'\t' read -r status redirect <<<"$data"
   summarize_status_description "$status" "$redirect"
 }
 
@@ -1287,12 +1283,7 @@ print_text_result_row() {
   local http_cell=$3
   local https_cell=$4
 
-  jq -c -n \
-    --arg service "$service" \
-    --arg ip "$ip" \
-    --arg http "$http_cell" \
-    --arg https "$https_cell" \
-    '{service: $service, ip: $ip, http: $http, https: $https}'
+  printf "%s\t%s\t%s\t%s\n" "$service" "$ip" "$http_cell" "$https_cell"
 }
 
 print_text_result_from_json() {
@@ -1369,12 +1360,9 @@ print_table_results() {
       "HTTPS" \
       "$COLOR_RESET"
 
-    for row_json in "${TEXT_RESULTS[@]}"; do
-      local service http https
-      service=$(jq -r '.service' <<<"$row_json")
-      ip=$(jq -r '.ip' <<<"$row_json")
-      http=$(jq -r '.http' <<<"$row_json")
-      https=$(jq -r '.https' <<<"$row_json")
+    local row service ip http https
+    for row in "${TEXT_RESULTS[@]}"; do
+      IFS=$'\t' read -r service ip http https <<<"$row"
 
       printf "%s%b\t%s\t%s\t%s\n" \
         "$service" \
