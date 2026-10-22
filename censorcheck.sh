@@ -920,6 +920,7 @@ check_dns_hijacking() {
   local hijacked_domain=""
   local spoofed_count=0
   local test_domain domain_index i tmp_dir status
+  local pids=()
 
   local reference reference_entry reference_transport reference_name reference_ip
   reference=$(get_reference_resolver)
@@ -953,10 +954,12 @@ check_dns_hijacking() {
     table_rows=()
     tmp_dir=$(mktemp -d)
 
+    pids=()
     for i in "${!DNS_SERVERS[@]}"; do
       resolve_via_plain_dns "$test_domain" "${DNS_SERVERS[$i]}" >"$tmp_dir/$i" &
+      pids+=("$!")
     done
-    wait
+    wait "${pids[@]}" || true
 
     for i in "${!DNS_SERVERS[@]}"; do
       status=$(classify_plain_answer "$(<"$tmp_dir/$i")" encrypted_ips)
@@ -1402,6 +1405,17 @@ run_checks_and_print() {
 
   TEXT_RESULTS=()
 
+  local i tmp_dir
+  local pids=()
+
+  tmp_dir=$(mktemp -d)
+
+  # ponytail: one background job per domain, add a concurrency limit if huge --file lists overload the host
+  for i in "${!domains[@]}"; do
+    check_domain "${domains[$i]}" >"$tmp_dir/$i" &
+    pids+=("$!")
+  done
+
   if ! $JSON_OUTPUT; then
     if $SHOW_HEADER; then
       print_header
@@ -1418,17 +1432,6 @@ run_checks_and_print() {
       printf "\n"
     fi
   fi
-
-  local i tmp_dir
-  local pids=()
-
-  tmp_dir=$(mktemp -d)
-
-  # ponytail: one background job per domain, add a concurrency limit if huge --file lists overload the host
-  for i in "${!domains[@]}"; do
-    check_domain "${domains[$i]}" >"$tmp_dir/$i" &
-    pids+=("$!")
-  done
 
   for i in "${!domains[@]}"; do
     show_progress "$((i + 1))" "$total_domains" "${domains[$i]}"
